@@ -96,8 +96,28 @@ namespace VdmHost.Commands
                     + "如确有需要，先确认该窗口属于本次任务并显式传 allowForeground=true。");
             }
 
+            // 子窗口/控件跟着父窗口走，单独"移动"到别的桌面没有意义，
+            // 而且用户多半是抓错了 hwnd（把按钮、编辑框当成窗口）。当场拒绝比默默做无效操作好。
+            IntPtr root = Win32.GetAncestor(hwnd, Win32.GA_ROOT);
+            if (root != hwnd)
+            {
+                throw new VdmException("not_a_top_level_window",
+                    $"0x{raw:X} 不是顶层窗口（它是 0x{root.ToInt64():X} 的子窗口/控件）。"
+                    + "子窗口跟着父窗口一起走，不能单独移动。请对顶层窗口操作——用 list_windows 拿 isTopLevel:true 的那些。");
+            }
+
             WindowInfo before = Windows.Describe(hwnd);
             Guid? beforeDesktop = api.WindowDesktop(hwnd);
+
+            // "当前前台"只是用户正在操作的一种情形：焦点可能在别的窗口上，而用户眼前这个窗口
+            // 仍然是他要看的（比如游戏窗口失焦后被通知打断）。移走它同样会让他眼前的东西消失，
+            // 所以这种情况不下手也不是自动决定的——至少要说清楚，别让调用方以为悄无声息。
+            if (before != null && before.Visible && beforeDesktop.HasValue && beforeDesktop.Value == api.CurrentId())
+            {
+                warnings.Add(
+                    $"这个窗口原本就在用户当前显示的桌面上（0x{raw:X}「{before.Title}」）。移走之后它会从用户眼前消失；"
+                    + "如果那是用户正在看/正在玩的东西，请立刻用 move_window 移回原桌面。");
+            }
 
             if (beforeDesktop.HasValue && beforeDesktop.Value == target)
             {

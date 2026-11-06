@@ -876,6 +876,9 @@ export function describeError(err, toolName) {
   } else if (code === 'desktop_not_found') {
     parts.push('', '这个桌面 GUID 已经不存在了——很可能被用户手动删掉了。')
     parts.push('先跑 vdm_list_desktops 拿最新 GUID，或用 vdm_ensure_workspace_desktop 按名字重新获取/重建。不要沿用旧 GUID。')
+  } else if (code === 'not_a_top_level_window') {
+    parts.push('', '你给的是子窗口或控件，不是顶层窗口。子窗口跟着父窗口走，不能单独移到别的桌面。')
+    parts.push('用 vdm_list_windows 取 isTopLevel:true 的那一条，或先 vdm_window_info 确认它是什么。')
   } else if (code === 'invalid_hwnd') {
     parts.push('', '窗口句柄已经失效（窗口被关掉或重建了）。重新跑 vdm_list_windows 拿新的 hwnd，不要复用旧句柄。')
   } else if (code === 'last_desktop') {

@@ -585,9 +585,11 @@ export function apply(ctx, config = {}) {
         },
         { timeoutMs: cfg.captureTimeoutMs, signal: exec?.signal },
       )
-      const text = fmt.fmtCapture(r.data)
-      const images = await attachImage(ctx, r.data?.path)
-      return { ok: true, text, images, data: r.data }
+      const attached = await attachImage(ctx, r.data?.path)
+      const text = [fmt.fmtCapture(r.data), attached.note, ...r.warnings.map((w) => `⚠ ${w}`)]
+        .filter(Boolean)
+        .join('\n')
+      return { ok: true, text, images: attached.images, data: r.data }
     },
   })
 
@@ -700,16 +702,26 @@ function service(ctx, name) {
   }
 }
 
+// 把截图挂进当前对话。任何一步失败都要说出来——图片没挂上但文件还在，
+// 不等于"截图失败"，也不能静默丢掉，否则模型会以为自己看到了界面。
 async function attachImage(ctx, filePath) {
-  if (!filePath || !existsSync(filePath)) return []
+  if (!filePath) return { images: [], note: '⚠ 原生层没有返回截图路径。' }
+  if (!existsSync(filePath)) return { images: [], note: `⚠ 截图文件不存在：${filePath}` }
+
   const svc = service(ctx, 'attachments')
-  if (!svc || typeof svc.saveImages !== 'function') return []
+  if (!svc || typeof svc.saveImages !== 'function') {
+    return { images: [], note: `⚠ 当前环境没有 attachments 服务，图片没有挂进对话。文件在：${filePath}` }
+  }
   try {
     const data = readFileSync(filePath)
     const saved = await svc.saveImages([{ data, mediaType: 'image/png', name: filePath.split(/[\\/]/).pop() }])
-    return Array.isArray(saved) ? saved : []
-  } catch {
-    return []
+    const images = Array.isArray(saved) ? saved : []
+    if (images.length === 0) {
+      return { images, note: `⚠ 附件服务没有返回可用图片，界面内容看不到。文件在：${filePath}` }
+    }
+    return { images, note: '' }
+  } catch (err) {
+    return { images: [], note: `⚠ 把截图挂进对话失败（${err?.message || err}）。文件在：${filePath}` }
   }
 }
 

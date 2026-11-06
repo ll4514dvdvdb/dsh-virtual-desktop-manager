@@ -35,15 +35,24 @@ IVirtualDesktopManager / IVirtualDesktopManagerInternal / PrintWindow / Win32 �
 
 前提：Windows 11（详见[兼容性](docs/compatibility.md)）、DSH ≥ 0.2.0-rc.1。
 
-```powershell
-# 从本地目录安装（源码开发时用这个）
-& "$env:LOCALAPPDATA\Programs\DeepSeek Harness\resources\runtime\cli\bin\dsh.cmd" plugin --profile desktop add "file:D:/Deepseek Harness/dsh-virtual-desktop-manager"
+**必须先把 DSH 完全退出**（含托盘图标）。运行中的 DSH 会持有 profile 的 `package.json` 写锁，此时安装会卡在 `atomic-write: timed out waiting for the writer lock` 上——这是实测行为，不是偶发。CLI 安装和 DSH 内的插件管理器都绕不过。
 
-# 从 npm 安装（如果已发布）
-& "$env:LOCALAPPDATA\Programs\DeepSeek Harness\resources\runtime\cli\bin\dsh.cmd" plugin --profile desktop add dsh-virtual-desktop-manager
+```powershell
+# 方式一（推荐）：退出 DSH 后跑安装脚本，会自动检查进程、缺原生助手就先构建
+cd "D:/Deepseek Harness/dsh-virtual-desktop-manager"
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts\install.ps1
+
+# 方式二：手动 add（同样要在 DSH 退出后）
+& "$env:LOCALAPPDATA\Programs\DeepSeek Harness\resources\runtime\cli\bin\dsh.cmd" plugin --profile desktop add "file:D:/Deepseek Harness/dsh-virtual-desktop-manager"
 ```
 
-装完**必须完全退出并重开 DSH**（桌面版不能用 `--dump-config` 检查，profile 由 Electron 独占管理）。
+卸载：
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts\install.ps1 -Remove
+```
+
+装完重开 DSH。桌面版不能用 `--dump-config` 检查（profile 由 Electron 独占管理）。
 
 装好后在任意会话里直接调 `vdm_capabilities`，看到 `虚拟桌面 COM 可用` 就通了。
 

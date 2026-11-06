@@ -65,6 +65,8 @@ namespace VdmHost.Commands
             }
             return new Dictionary<string, object>
             {
+                // id 与 list_desktops 里每个桌面的 id 同名同义，方便调用方直接把两者对上。
+                { "id", current.ToString() },
                 { "desktopId", current.ToString() },
                 { "name", string.IsNullOrEmpty(name) ? "(未命名)" : name },
                 { "index", index },
@@ -87,6 +89,8 @@ namespace VdmHost.Commands
                     {
                         { "created", false },
                         { "reused", true },
+                        // 顶层也给一份 GUID：调用方不必为了拿 id 而钻 desktop.id 一层。
+                        { "desktopId", existing.ToString() },
                         { "desktop", new Dictionary<string, object>
                             {
                                 { "id", existing.ToString() },
@@ -114,6 +118,7 @@ namespace VdmHost.Commands
             {
                 { "created", true },
                 { "reused", false },
+                { "desktopId", created.Id.ToString() },
                 { "desktop", new Dictionary<string, object>
                     {
                         { "id", created.Id.ToString() },

@@ -194,12 +194,23 @@ tests/*.mjs               单元测试 + 原生层冒烟
 ## 测试
 
 ```powershell
-npm test              # 38 个用例：format / state / bridge / plugin 装载
+npm test              # 39 个用例：format / state / bridge / plugin 装载（纯 JS，不需要原生 exe）
 npm run test:host     # 原生层冒烟（只读命令，不建桌面不移动窗口）
-npm run test:all      # 两者都跑
+npm run test:live     # 工具层集成：真的调用 vdm_* 工具走完整链路（详见下方）
+npm run test:all      # 三个都跑
 ```
 
 `npm test` 不需要原生 exe（找不到时会 skip 依赖它的用例）；`npm run test:host` 需要先 `npm run build:host`，并且在**能拿到 COM 的进程**里跑（普通 PowerShell 通常可以；被降权/沙箱化的 shell 会返回退出码 2 并说明原因）。
+
+### `npm run test:live`：工具层集成测试
+
+单测只验证"格式化函数长什么样"，冒烟只验证"原生助手能不能读",都不验证**工具之间能不能接上**。`tests/tools-live.mjs` 补这一段：它 mock 一个最小 ctx、装载整个插件，然后依次真调用 `vdm_capabilities` → `list_desktops` → `get_current_desktop` → `list_windows` → `window_info` → `capture_window` → `create_desktop`/`remove_desktop` → `ensure_workspace_desktop` → `game_mode` 开关与拦截 → 审计日志。
+
+它真的会建一个临时桌面又删掉（名字 `__vdm_selftest_<时间戳>`），所以不切屏但会短暂出现在任务视图里。
+
+刻意**不做**的动作：`switch_desktop`（会切走用户的屏）、`launch`（会弹窗抢前台）、`move_window` 真移、`close_window` 真关——这些属于"要么动用户桌面、要么动用户程序"，不该出现在自动测试里。`--no-desktop` 可跳过建/删桌面，`--keep` 保留临时状态目录。
+
+这一层是抓真 bug 的关键：早期版本 `list_windows` 返回的 `hwnd` 是 `"3084C"`（没有 `0x` 前缀），而 `window_info` 只认 `0x...`，于是"枚举→查询"这条最常用的链路直接断掉——单测和冒烟都测不到，因为各自都自洽。
 
 ## 开发时的一个坑：改代码要重新安装
 

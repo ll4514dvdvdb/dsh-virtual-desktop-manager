@@ -91,6 +91,18 @@ test('需要授权的工具在 schema 里就能看到 authorized/allowForeground
   assert.deepEqual(byName.vdm_window_info.parameters.required, ['hwnd'])
 })
 
+test('launch 的控制参数是 avoidForegroundMove，不是 allowForeground（原生层只认前者）', () => {
+  const byName = Object.fromEntries(registered.map((t) => [t.name, t]))
+  const props = byName.vdm_launch_in_desktop.parameters.properties
+  assert.ok(props.avoidForegroundMove, 'launch 应暴露 avoidForegroundMove')
+  assert.equal(props.allowForeground, undefined, 'launch 不该暴露 allowForeground：原生层不读这个参数')
+  // move_window 的 allowForeground 是另一套语义（保护用户自己的前台窗口），必须保留
+  assert.ok(
+    byName.vdm_move_window.parameters.properties.allowForeground,
+    'move_window 的 allowForeground 不能被顺手删掉',
+  )
+})
+
 test('switch_desktop 不带 authorized 时拒绝，且不碰原生助手', async () => {
   state.writeState({ gameMode: false, pending: [] })
   const tool = registered.find((t) => t.name === 'vdm_switch_desktop')

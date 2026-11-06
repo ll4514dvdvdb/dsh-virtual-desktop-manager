@@ -1,6 +1,6 @@
 {
   "name": "dsh-virtual-desktop-manager",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Windows 虚拟桌面管理插件：让 AI Agent 在独立的 AI 工作桌面里启动、管理、截图 GUI 应用，不主动切换也不抢占用户正在使用的桌面；带全局 Game Mode 硬开关与审计日志",
   "type": "module",
   "main": "index.js",
@@ -55,7 +55,8 @@
   "scripts": {
     "build:host": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/build-host.ps1",
     "test": "node --test tests/format.test.mjs tests/state.test.mjs tests/bridge.test.mjs tests/plugin.test.mjs",
-    "test:all": "npm run test && npm run test:host",
-    "test:host": "node tests/host-smoke.mjs"
+    "test:all": "npm run test && npm run test:host && npm run test:live",
+    "test:host": "node tests/host-smoke.mjs",
+    "test:live": "node tests/tools-live.mjs"
   }
 }

@@ -325,22 +325,24 @@ export function apply(ctx, config = {}) {
       }
 
       const created = await call('create_desktop', { name: wanted, reuseExistingName: true })
-      if (created.data?.desktopId) {
+      // 原生层两种返回形态都见过：顶层 desktopId，或嵌套 desktop.id。两个都认，别让 GUID 变 undefined。
+      const newDesktopId = created.data?.desktopId ?? created.data?.desktop?.id ?? null
+      if (newDesktopId) {
         try {
-          writeState({ workspaceDesktopId: created.data.desktopId, workspaceDesktopName: wanted })
+          writeState({ workspaceDesktopId: newDesktopId, workspaceDesktopName: wanted })
         } catch {
           /* ignore */
         }
       }
       const text = [
         created.data?.reused ? `已复用 AI 工作桌面："${wanted}"` : `已创建 AI 工作桌面："${wanted}"`,
-        `GUID：${created.data?.desktopId}`,
+        `GUID：${newDesktopId ?? '(原生层没有返回 GUID，请用 vdm_list_desktops 按名字找)'}`,
         created.data?.currentDesktopChanged
           ? '⚠ 创建后用户当前桌面发生了变化，请让用户确认并手动切回。'
           : '用户当前使用的桌面没有被切换。',
         ...created.warnings.map((w) => `⚠ ${w}`),
       ].join('\n')
-      return { ok: true, desktopId: created.data?.desktopId, text, data: created.data }
+      return { ok: true, desktopId: newDesktopId, text, data: created.data }
     },
   })
 
@@ -482,11 +484,16 @@ export function apply(ctx, config = {}) {
         hwnd: { type: ['string', 'number'], description: '窗口句柄。' },
         desktopId: { type: 'string', description: '目标桌面 GUID。' },
         allowForeground: { type: 'boolean', description: '允许移动当前前台窗口（危险，默认 false）。' },
-        allowInGameMode: { type: 'boolean', description: 'Game Mode 下是否允许（默认允许，因为移动非前台窗口不影响用户）。' },
+        allowInGameMode: {
+          type: 'boolean',
+          description:
+            'Game Mode 下是否允许移动（默认拒绝）。Game Mode 期间只有前台窗口会被原生层硬拦，后台窗口拦不住，所以默认一律不动；确认目标不是用户正在用的东西再传 true。',
+        },
       },
       required: ['hwnd', 'desktopId'],
       additionalProperties: false,
     },
+    gate: gameModeBlock('移动窗口'),
     run: async (args) => {
       if (gameModeOn() && args.allowForeground === true) {
         throw new HostError('game_mode_blocks', 'Game Mode 下不允许移动前台窗口')
@@ -519,7 +526,11 @@ export function apply(ctx, config = {}) {
           description: '期望的窗口样式，默认 normal。minimized/hidden 可能被程序忽略，返回值会告诉你是否真的生效。',
         },
         waitForWindowMs: { type: 'number', description: '等待主窗口出现的最长时间，默认 8000，上限 60000。' },
-        allowForeground: { type: 'boolean', description: '允许新窗口抢前台并仍然执行移动（默认 false，抢到前台就跳过移动）。' },
+        avoidForegroundMove: {
+          type: 'boolean',
+          description:
+            '默认 false：即使新窗口抢到前台，也照样把它移到目标桌面（它正是那个该被移走的窗口）。设为 true 则抢到前台就放弃移动。',
+        },
         allowInGameMode: { type: 'boolean', description: 'Game Mode 下是否允许启动（默认不允许）。' },
       },
       required: ['path'],
@@ -538,7 +549,7 @@ export function apply(ctx, config = {}) {
           desktopId: args.desktopId || undefined,
           windowStyle: args.windowStyle || 'normal',
           waitForWindowMs: clampInt(args.waitForWindowMs, 0, 60000, 8000),
-          allowForeground: args.allowForeground === true && !gameModeOn(),
+          avoidForegroundMove: args.avoidForegroundMove === true,
         },
         { timeoutMs: Math.max(cfg.defaultTimeoutMs, 60000) },
       )
@@ -609,6 +620,21 @@ export function apply(ctx, config = {}) {
       },
       required: ['hwnd'],
       additionalProperties: false,
+    },
+    gate: async (args) => {
+      if (!gameModeOn()) return null
+      // dryRun 只做只读评估，不碰目标程序，任何时候都允许。
+      if (args?.dryRun !== false) return null
+      if (args?.allowInGameMode === true) return null
+      return {
+        code: 'game_mode_blocks',
+        reason: '关闭窗口：Game Mode 下禁止真正关闭',
+        text: [
+          'Game Mode 已开启，关闭窗口会向目标程序发 WM_CLOSE，可能弹出保存对话框抢走前台，已拒绝（这条请求已进等待队列）。',
+          '只做风险预演不受限制：传 dryRun: true 可以评估是否存在未保存内容。',
+          '真要关时请让用户在 Game Mode 面板里关闭它；或确认目标不是用户正在用的东西后显式传 allowInGameMode: true。',
+        ].join('\n'),
+      }
     },
     run: async (args) => {
       const r = await call('close_window', {
@@ -759,7 +785,13 @@ function compactArgs(args) {
   const out = {}
   for (const [k, v] of Object.entries(args || {})) {
     if (v === undefined || v === null) continue
-    if (k === 'authorized' || k === 'force' || k === 'allowForeground' || k === 'allowInGameMode') {
+    if (
+      k === 'authorized' ||
+      k === 'force' ||
+      k === 'allowForeground' ||
+      k === 'avoidForegroundMove' ||
+      k === 'allowInGameMode'
+    ) {
       out[k] = Boolean(v)
       continue
     }

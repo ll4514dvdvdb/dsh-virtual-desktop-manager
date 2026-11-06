@@ -105,7 +105,7 @@ namespace VdmHost.Commands
                 {
                     { "moved", false },
                     { "reason", "already_on_target" },
-                    { "hwnd", hwnd.ToInt64().ToString("X") },
+                    { "hwnd", "0x" + hwnd.ToInt64().ToString("X") },
                     { "desktopId", target.ToString() },
                 };
             }
@@ -134,7 +134,7 @@ namespace VdmHost.Commands
             return new Dictionary<string, object>
             {
                 { "moved", true },
-                { "hwnd", hwnd.ToInt64().ToString("X") },
+                { "hwnd", "0x" + hwnd.ToInt64().ToString("X") },
                 { "desktopId", target.ToString() },
                 { "previousDesktopId", beforeDesktop?.ToString() },
                 { "verified", verified },
@@ -264,6 +264,7 @@ namespace VdmHost.Commands
             {
                 return new Dictionary<string, object>
                 {
+                    { "hwnd", "0x" + raw.ToString("X") },
                     { "closed", false },
                     { "dryRun", true },
                     { "risk", risk },
@@ -298,6 +299,7 @@ namespace VdmHost.Commands
 
             return new Dictionary<string, object>
             {
+                { "hwnd", "0x" + raw.ToString("X") },
                 { "closed", !stillOpen },
                 { "stillOpen", stillOpen },
                 { "dryRun", false },

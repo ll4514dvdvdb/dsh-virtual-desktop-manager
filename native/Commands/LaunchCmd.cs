@@ -44,7 +44,7 @@ namespace VdmHost.Commands
             string hwndHex = null;
             if (result.WindowFound)
             {
-                hwndHex = new IntPtr(result.Hwnd).ToInt64().ToString("X");
+                hwndHex = "0x" + new IntPtr(result.Hwnd).ToInt64().ToString("X");
                 if (result.Window != null)
                 {
                     processName = result.Window.ProcessName;

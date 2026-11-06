@@ -32,7 +32,7 @@ namespace VdmHost.Support
         {
             return new Dictionary<string, object>
             {
-                { "hwnd", Hwnd.ToInt64().ToString("X") },
+                { "hwnd", "0x" + Hwnd.ToInt64().ToString("X") },
                 { "hwndDecimal", Hwnd.ToInt64() },
                 { "pid", (long)Pid },
                 { "processName", ProcessName },

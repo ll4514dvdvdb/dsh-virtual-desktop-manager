@@ -228,16 +228,17 @@ native/Interop/Win32.cs    P/Invoke
 native/Support/*.cs       窗口枚举、PrintWindow 截图、CreateProcess 启动、完整性级别
 native/Commands/*.cs      各命令实现（含 UiaCmd.cs）
 scripts/build-host.ps1    离线构建原生助手（重定向所有 dotnet 目录，不联网）
-scripts/install.ps1       装/卸 profile（必须在 DSH 完全退出后跑）
+scripts/install.ps1       装/卸 profile（DSH 开着也能装，卡住见"排错"一节）
 scripts/install.cmd       双击版安装入口（带 pause）
 scripts/verify-install.ps1 安装落地校验 + 原生层冒烟
-tests/*.mjs               单元测试 + 原生层冒烟
+tests/*.mjs               单元测试 + 原生层冒烟 + 工具层真机联调
+docs/verification.md      每个需求项对应的实现与实跑证据（含未验证项）
 ```
 
 ## 测试
 
 ```powershell
-npm test              # 39 个用例：format / state / bridge / plugin 装载（纯 JS，不需要原生 exe）
+npm test              # 42 个用例：format / state / bridge / plugin 装载（纯 JS，不需要原生 exe）
 npm run test:host     # 原生层冒烟（只读命令，不建桌面不移动窗口）
 npm run test:live     # 工具层集成：真的调用 vdm_* 工具走完整链路（详见下方）
 npm run test:all      # 三个都跑
@@ -247,7 +248,7 @@ npm run test:all      # 三个都跑
 
 ### `npm run test:live`：工具层集成测试
 
-单测只验证"格式化函数长什么样"，冒烟只验证"原生助手能不能读",都不验证**工具之间能不能接上**。`tests/tools-live.mjs` 补这一段：它 mock 一个最小 ctx、装载整个插件，然后依次真调用 `vdm_capabilities` → `list_desktops` → `get_current_desktop` → `list_windows` → `window_info` → `capture_window` → `create_desktop`/`remove_desktop` → `ensure_workspace_desktop` → `game_mode` 开关与拦截 → 审计日志。
+单测只验证"格式化函数长什么样"，冒烟只验证"原生助手能不能读",都不验证**工具之间能不能接上**。`tests/tools-live.mjs` 补这一段：它 mock 一个最小 ctx、装载整个插件，然后依次真调用 `vdm_capabilities` → `list_desktops` → `get_current_desktop` → `list_windows` → `window_info` → `capture_window` → `uia_tree`/`uia_act` → `create_desktop`/`remove_desktop` → `ensure_workspace_desktop` → `game_mode` 开关与拦截 → 审计日志。
 
 它真的会建一个临时桌面又删掉（名字 `__vdm_selftest_<时间戳>`），所以不切屏但会短暂出现在任务视图里。
 
@@ -270,6 +271,10 @@ DSH 用 pnpm 装 `file:` 依赖时是**硬链接/拷贝**整个包到 `~/.dsh/pr
 ## 兼容性
 
 已在 **Windows 11 25H2（build 26200, UBR 9711）** 实测通过。完整矩阵与每个版本的风险点见 [docs/compatibility.md](docs/compatibility.md)。
+
+## 验证记录
+
+需求逐条对应的实现、测试名和实跑结果在 [docs/verification.md](docs/verification.md)。那里也诚实列出了"还没验的 4 项"（都要重启 DSH 才验得到）。
 
 ## 已知限制
 

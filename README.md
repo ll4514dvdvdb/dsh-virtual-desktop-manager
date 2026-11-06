@@ -65,23 +65,43 @@ powershell -NoProfile -ExecutionPolicy Bypass -File scripts\verify-install.ps1
 
 它查四处是否真的落地（`dependencies` / `dsh.profile.bundles` / `pnpm-lock.yaml` / `node_modules`），再用**装着的那份拷贝**跑一次原生助手冒烟测试，最后打印当前桌面与窗口列表。全绿再重开 DSH。
 
-### 排错：安装"看起来成功"但 DSH 里没有 `vdm_*` 工具
+### 排错：安装卡住 / 装完 DSH 里没有 `vdm_*` 工具
 
-实测踩到过：DSH 还开着时安装，pnpm 会卡住，600 秒后被强杀，日志里只剩
+实测踩到过两种现象，原因不一样，别混为一谈。
+
+**现象 A：卡住，600 秒后被强杀**
 
 ```
 Progress: resolved 267, reused 8, downloaded 0, added 2
 dsh: pnpm printed nothing for 600000ms and was terminated
 ```
 
-结果是一种半成品状态——**文件已经拷进 `node_modules` 了，但 `dependencies`、`dsh.profile.bundles`、`pnpm-lock.yaml` 三处一个都没写**。命令退出码看起来正常，重开 DSH 却什么都没有。
+结果是半成品——**文件已经拷进 `node_modules` 了，但 `dependencies`、`dsh.profile.bundles`、`pnpm-lock.yaml` 三处一个都没写**。命令退出码看起来正常，重开 DSH 却什么都没有。
 
-处理：确认 DSH 已完全退出（`Get-Process -Name 'DeepSeek Harness'` 无输出），再跑 `install.ps1`。`verify-install.ps1` 会直接把这种状态标红。真清不干净就 `install.ps1 -Remove` 后重装。
+第一次是这个原因：`package.json` 被运行中的 DSH 握着写锁（用 `[IO.File]::Open($pf,'Open','ReadWrite','None')` 会抛"文件正由另一进程使用"）。**但后来 DSH 照样开着，安装却成功了**——所以"必须退出 DSH"不是铁律。真正让 pnpm 卡住的还有第二种情况：
 
-另外两点经验：
+**现象 B：慢，但不是死锁**
 
-- 在运行中的 DSH 里用插件管理器（`plugin_manager` 工具）装也一样会卡在同一步，不是脚本的问题。
-- 装到一次性 profile（`--profile vdm-test`）只用 647ms 就成功了，所以卡住的原因确定是**运行中 profile 的文件占用**，不是包本身或 `file:` 跨盘依赖的问题。
+pnpm 在解析时会去 `registry.npmjs.org` 拉包（尤其是它想顺手把别的依赖升级到"推荐版本"时）。实测有一次单条请求就花了 11 秒：
+
+```
+[WARN] Request took 11094ms: https://registry.npmjs.org/billion-context
+```
+
+这一轮完整跑下来 **3 分 20 秒**，看起来像卡死，其实在动。判断方法：看 `Progress:` 行的 `downloaded` / `added` 有没有在涨。
+
+处理顺序：
+
+1. 先跑 `verify-install.ps1` 看落到了几处（它会直接标红）。
+2. 卡住但 `Progress` 在涨 → 等，别杀。网络不好就是慢。
+3. `Progress` 完全不动超过 10 分钟 → 确认代理可用（`registry.npmjs.org` 走代理），再 `install.ps1 -Remove` 重装。
+4. 真清不干净 → 完全退出 DSH（`Get-Process -Name 'DeepSeek Harness'` 无输出）后再装。
+
+另外两点：
+
+- 在运行中的 DSH 里用插件管理器（`plugin_manager` 工具）装也一样会遇到，不是脚本的问题。
+- 装到一次性 profile（`--profile vdm-test`）通常 500~650ms 就完，因为那边没有要顺带升级的旧依赖。
+- **`dsh plugin add` 可能顺带改动别的包**：实测这次把 `billion-context` 从 0.1.209 升到了 0.1.212，还多塞了一个 `dsh-ops`（不在 `bundles` 里、和当前 DSH 版本不兼容）。不想要的用 `dsh plugin --profile desktop remove dsh-ops` 清掉即可（5 秒）。
 
 ### 原生助手
 

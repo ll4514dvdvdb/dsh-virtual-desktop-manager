@@ -346,7 +346,15 @@ namespace VdmHost.Interop
         public Guid? WindowDesktop(IntPtr hwnd)
         {
             if (_public == null) return null;
-            try { return _public.GetWindowDesktopId(hwnd); }
+            try
+            {
+                Guid id = _public.GetWindowDesktopId(hwnd);
+                // 刚创建、还没被 shell 分配到桌面的窗口会"成功"返回全零 GUID。
+                // 全零不是任何真实桌面，必须按"未知"处理：调用方拿它跟当前桌面比较会得出相反结论
+                // （实测 DSH 的对话框窗口 onCurrentDesktop=true 但 id 全是 0）。
+                if (id == Guid.Empty) return null;
+                return id;
+            }
             catch { return null; }
         }
 

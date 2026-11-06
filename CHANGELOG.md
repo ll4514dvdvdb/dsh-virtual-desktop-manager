@@ -17,6 +17,14 @@
   `focus` 即使在 `allowInGameMode:true` 下也**始终禁止**（它会把目标窗口提到前台），而且不进等待队列——
   这是"永远不该做"的事，不是"等用户允许就能做"的事。
 
+### 修复
+
+- **未归属桌面的窗口返回全零 GUID**：刚创建、还没被 shell 分配到桌面的窗口（实测 DSH 的"打开"对话框），
+  `IVirtualDesktopManager.GetWindowDesktopId` 会"成功"返回 `00000000-0000-0000-0000-000000000000`。
+  全零不是任何真实桌面，此前被当成有效 id 传播，导致 `onCurrentDesktop:true` 与 `virtualDesktopId` 矛盾、
+  渲染成 `00000000`。现在 `DesktopApi.WindowDesktop()` 把全零归一化为 `null`（语义：还没有归属），
+  `host-smoke` 的自洽断言也同步排除"未知"再比较。
+
 ### 实现中踩到的坑（都已解决，记录下来免得以后再撞）
 
 - **`CacheRequest` + `el.Cached` 在 Chromium 窗口上必抛 `InvalidOperationException`（"不能请求未缓存的属性或模式"）**。

@@ -71,9 +71,12 @@ async function main() {
   const w = wins.data
   check('list_windows 返回 windows 数组', Array.isArray(w.windows))
   check('窗口记录含 hwnd/pid/processName', w.windows.every((x) => x.hwnd && x.pid && x.processName))
+  // virtualDesktopId 为 null / 全零 GUID 表示"还没有归属桌面"（刚创建、已隐藏或没进 shell 视图集合），
+  // 这种窗口不参与自洽比较——拿"未知"跟当前桌面比会得出相反结论。
+  const desktopKnown = (id) => Boolean(id) && String(id).replace(/-/g, '') !== '0'.repeat(32)
   check(
     '窗口的 onCurrentDesktop 与 virtualDesktopId 逻辑自洽',
-    w.windows.every((x) => !x.virtualDesktopId || x.onCurrentDesktop === (x.virtualDesktopId === d.currentDesktopId)),
+    w.windows.every((x) => !desktopKnown(x.virtualDesktopId) || x.onCurrentDesktop === (x.virtualDesktopId === d.currentDesktopId)),
   )
 
   console.log('\n--- list_desktops 渲染结果 ---')

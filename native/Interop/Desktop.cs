@@ -181,7 +181,7 @@ namespace VdmHost.Interop
         {
             try
             {
-                _shell = (IServiceProvider10)Activator.CreateInstance(Type.GetTypeFromCLSID(VdGuids.CLSID_ImmersiveShell));
+                _shell = (IServiceProvider10)CreateComWithRetry(VdGuids.CLSID_ImmersiveShell);
             }
             catch (Exception ex)
             {
@@ -212,12 +212,38 @@ namespace VdmHost.Interop
 
             try
             {
-                _public = (IVirtualDesktopManagerPublic)Activator.CreateInstance(Type.GetTypeFromCLSID(VdGuids.CLSID_VirtualDesktopManager));
+                _public = (IVirtualDesktopManagerPublic)CreateComWithRetry(VdGuids.CLSID_VirtualDesktopManager);
             }
             catch
             {
                 _public = null;
             }
+        }
+
+        /// <summary>
+        /// 冷启动时 ImmersiveShell 的类注册偶尔会瞬时读不到（实测第一次调用返回 0x80040154，
+        /// 紧接着重试就成功，12 次连续调用 0 失败）。所以对 REGDB_E_CLASSNOTREG 做短重试，
+        /// 其它错误立即抛出，避免把真实的权限/版本问题也拖成 3 次等待。
+        /// </summary>
+        private static object CreateComWithRetry(Guid clsid)
+        {
+            Type type = Type.GetTypeFromCLSID(clsid);
+            Exception last = null;
+            for (int attempt = 1; attempt <= 3; attempt++)
+            {
+                try
+                {
+                    return Activator.CreateInstance(type);
+                }
+                catch (Exception ex)
+                {
+                    last = ex;
+                    uint hr = unchecked((uint)(ex is COMException ce ? ce.ErrorCode : ex.HResult));
+                    if (hr != 0x80040154u || attempt == 3) break;
+                    System.Threading.Thread.Sleep(120);
+                }
+            }
+            throw last;
         }
 
         private static VdmUnavailableException Explain(Exception ex, string what)
@@ -231,7 +257,8 @@ namespace VdmHost.Interop
                          + "虚拟桌面内部 COM 服务只接受同会话的 Medium 完整性调用。";
                     break;
                 case 0x80040154:
-                    hint = "ImmersiveShell 服务未注册，可能不是交互式会话，或系统版本过旧。";
+                    hint = "ImmersiveShell 的类注册瞬时读不到（冷启动偶发，已自动重试 3 次）。"
+                         + "若持续出现，说明当前不是交互式会话，或系统版本与内置接口定义不匹配。";
                     break;
                 default:
                     hint = "当前 Windows 构建可能与内置的 24H2/25H2 接口定义不匹配。";

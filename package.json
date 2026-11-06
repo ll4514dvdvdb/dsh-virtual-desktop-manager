@@ -55,8 +55,9 @@
   "scripts": {
     "build:host": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/build-host.ps1",
     "test": "node --test tests/format.test.mjs tests/state.test.mjs tests/bridge.test.mjs tests/plugin.test.mjs",
-    "test:all": "npm run test && npm run test:host && npm run test:live",
+    "test:all": "npm run test && npm run test:host && npm run test:live && npm run test:recreate",
     "test:host": "node tests/host-smoke.mjs",
-    "test:live": "node tests/tools-live.mjs"
+    "test:live": "node tests/tools-live.mjs",
+    "test:recreate": "node tests/recreate-desktop.mjs"
   }
 }

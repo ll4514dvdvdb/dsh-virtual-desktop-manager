@@ -309,7 +309,8 @@ export function apply(ctx, config = {}) {
             found.isCurrent ? '⚠ 这个桌面当前正显示给用户，之后往里启动窗口会直接出现在用户眼前。' : '该桌面当前不显示，对它操作不会打扰用户。',
             `里面的窗口：${found.windowCount ?? 0} 个`,
           ].join('\n'),
-          data: found,
+          // data 里也放一份 desktopId：两个分支的 data 结构要一致，否则调用方得写兼容代码
+          data: { ...found, desktopId: found.id },
         }
       }
 
@@ -343,7 +344,12 @@ export function apply(ctx, config = {}) {
           : '用户当前使用的桌面没有被切换。',
         ...created.warnings.map((w) => `⚠ ${w}`),
       ].join('\n')
-      return { ok: true, desktopId: newDesktopId, text, data: created.data }
+      return {
+        ok: true,
+        desktopId: newDesktopId,
+        text,
+        data: newDesktopId ? { ...created.data, desktopId: newDesktopId } : created.data,
+      }
     },
   })
 

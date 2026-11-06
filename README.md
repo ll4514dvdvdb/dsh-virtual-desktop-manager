@@ -241,7 +241,8 @@ docs/verification.md      每个需求项对应的实现与实跑证据（含未
 npm test              # 43 个用例：format / state / bridge / plugin 装载（纯 JS，不需要原生 exe）
 npm run test:host     # 原生层冒烟（只读命令，不建桌面不移动窗口）
 npm run test:live     # 工具层集成：真的调用 vdm_* 工具走完整链路（详见下方）
-npm run test:all      # 三个都跑
+npm run test:recreate # 删掉 AI 工作桌面再让它自己重建（验"用户手动删除"这条需求，有安全阀）
+npm run test:all      # 四个都跑
 ```
 
 `npm test` 不需要原生 exe（找不到时会 skip 依赖它的用例）；`npm run test:host` 需要先 `npm run build:host`，并且在**能拿到 COM 的进程**里跑（普通 PowerShell 通常可以；被降权/沙箱化的 shell 会返回退出码 2 并说明原因）。

@@ -250,6 +250,18 @@ ok('pending 能看到队列里的记录', pending.ok === true && (pending.data?.
 const status = await call('vdm_game_mode', { action: 'status' })
 ok('status 显示开启中', status.ok === true && status.data?.gameMode === true, status.data)
 
+// Game Mode 里明确允许的两件事，必须真的还能跑：窗口级截图、只读评估。
+if (target?.hwnd) {
+  const capInGame = await call('vdm_capture_window', { hwnd: target.hwnd, strict: false })
+  ok('Game Mode 下 capture_window 仍可用（不影响前台的窗口级截图）', capInGame.ok === true, capInGame.text)
+  const closeDry = await call('vdm_close_window', { hwnd: target.hwnd, dryRun: true })
+  ok('Game Mode 下 close_window 的 dryRun 预演仍可用（只读）', closeDry.ok === true, closeDry.text)
+  const closeReal = await call('vdm_close_window', { hwnd: target.hwnd, dryRun: false })
+  ok('Game Mode 下 close_window 真关被拦截', closeReal.ok === false, closeReal.text)
+} else {
+  skipped.push('Game Mode 截图/关闭用例（没拿到可用窗口）')
+}
+
 const offNoAuth = await call('vdm_game_mode', { action: 'off' })
 ok('不带 authorized 关不掉', offNoAuth.ok === false, offNoAuth.text)
 

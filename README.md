@@ -171,6 +171,18 @@ npm run test:all      # 两者都跑
 
 `npm test` 不需要原生 exe（找不到时会 skip 依赖它的用例）；`npm run test:host` 需要先 `npm run build:host`，并且在**能拿到 COM 的进程**里跑（普通 PowerShell 通常可以；被降权/沙箱化的 shell 会返回退出码 2 并说明原因）。
 
+## 开发时的一个坑：改代码要重新安装
+
+DSH 用 pnpm 装 `file:` 依赖时是**硬链接/拷贝**整个包到 `~/.dsh/profiles/desktop/node_modules/`，不是目录软链。所以：
+
+| 改了什么 | 要做什么 |
+|---|---|
+| `lib/*.js`、`index.js` | 重新 `install.ps1`（或直接改 node_modules 里的副本）才会反映到运行中的 DSH |
+| `native/**/*.cs` | `npm run build:host` 重新生成 `dist/vdmhost.exe`，**然后**重新安装（副本里的 exe 不会自己更新） |
+| `scripts/`、`tests/`、文档 | 不用重装 |
+
+改完想立刻验证原生层，不必等插件装载——直接 `node tests/host-smoke.mjs`，它走的是同一套 `bridge.js` 调用路径。
+
 ## 兼容性
 
 已在 **Windows 11 25H2（build 26200, UBR 9711）** 实测通过。完整矩阵与每个版本的风险点见 [docs/compatibility.md](docs/compatibility.md)。

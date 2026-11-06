@@ -1,0 +1,16 @@
+# 统一换行符，避免 Windows 上 autocrlf 来回转换产生的 noise
+* text=auto eol=lf
+
+# 二进制
+*.exe binary
+*.dll binary
+*.png binary
+*.ico binary
+*.zip binary
+
+# Windows 脚本必须 CRLF（旧 cmd.exe 对 LF 的 .cmd 容错不稳定）
+*.cmd text eol=crlf
+*.bat text eol=crlf
+
+# PowerShell 脚本带 UTF-8 BOM（PowerShell 5.1 没有 BOM 会按 GBK 解码，中文注释和字符串会碎）
+*.ps1 text eol=crlf

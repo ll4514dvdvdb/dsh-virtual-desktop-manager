@@ -1,4 +1,4 @@
-# 编译原生助手 vdmhost.exe 到 dist\。
+﻿# 编译原生助手 vdmhost.exe 到 dist\。
 #
 # 为什么需要这个脚本（而不是直接 dotnet build）：
 #   1. 受限环境下 dotnet 会去写 %USERPROFILE%\.dotnet 和 %APPDATA%\NuGet\NuGet.Config，

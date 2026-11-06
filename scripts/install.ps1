@@ -1,4 +1,4 @@
-<#
+﻿<#
 .SYNOPSIS
   把 dsh-virtual-desktop-manager 安装到（或从）DSH 的 desktop profile。
 
@@ -64,6 +64,54 @@ if ($Remove) {
 
 if ($LASTEXITCODE -ne 0) {
   Fail "dsh plugin 返回退出码 $LASTEXITCODE，安装未完成。"
+}
+
+# 3. 校验真的落地了 ---------------------------------------------------------
+# 本机遇到过一次：pnpm 把文件拷进 node_modules 了，但 dependencies / bundles / lockfile
+# 三处都没写进去，命令却"看起来"跑完了。不校验就会以为装好了，重开 DSH 发现没有工具。
+if (-not $Remove) {
+  $profileDir = Join-Path $env:USERPROFILE ".dsh\profiles\$Profile"
+  $problems = New-Object System.Collections.Generic.List[string]
+
+  $pkgJsonPath = Join-Path $profileDir 'package.json'
+  if (-not (Test-Path $pkgJsonPath)) {
+    $problems.Add("找不到 profile 的 package.json：$pkgJsonPath")
+  } else {
+    $cfg = Get-Content -LiteralPath $pkgJsonPath -Raw -Encoding UTF8 | ConvertFrom-Json
+    $depEntry = $cfg.PSObject.Properties['dependencies']
+    if ($null -eq $depEntry -or $null -eq $depEntry.Value.PSObject.Properties['dsh-virtual-desktop-manager']) {
+      $problems.Add('package.json 的 dependencies 里没有 dsh-virtual-desktop-manager')
+    }
+    if (-not (@($cfg.dsh.profile.bundles) -contains 'dsh-virtual-desktop-manager')) {
+      $problems.Add('package.json 的 dsh.profile.bundles 里没有 dsh-virtual-desktop-manager')
+    }
+  }
+
+  $lockPath = Join-Path $profileDir 'pnpm-lock.yaml'
+  if ((Test-Path $lockPath) -and (-not (Select-String -LiteralPath $lockPath -Pattern 'dsh-virtual-desktop-manager' -Quiet))) {
+    $problems.Add('pnpm-lock.yaml 里没有这个包（pnpm 只拷了文件、没记账）')
+  }
+
+  $hostInProfile = Join-Path $profileDir 'node_modules\dsh-virtual-desktop-manager\dist\vdmhost.exe'
+  if (-not (Test-Path $hostInProfile)) {
+    $problems.Add("node_modules 里找不到 vdmhost.exe：$hostInProfile")
+  }
+
+  if ($problems.Count -gt 0) {
+    Write-Host ""
+    Write-Host "✗ 安装命令跑完了，但校验发现以下问题：" -ForegroundColor Red
+    $problems | ForEach-Object { Write-Host "  - $_" -ForegroundColor Red }
+    Write-Host ""
+    Write-Host "  这是 pnpm 只完成文件拷贝、没完成依赖记账的半成品状态，DSH 不会认。"
+    Write-Host "  处理办法（按顺序试）："
+    Write-Host "    1) 再跑一次本脚本"
+    Write-Host "    2) 跑 scripts\install.ps1 -Remove 卸载后再装"
+    Write-Host "    3) 手工删掉 $profileDir\node_modules\dsh-virtual-desktop-manager 后重装"
+    exit 1
+  }
+
+  Write-Host ""
+  Write-Host "✓ 校验通过：dependencies / bundles / pnpm-lock / node_modules 四处都已落地。" -ForegroundColor Green
 }
 
 Write-Host ""

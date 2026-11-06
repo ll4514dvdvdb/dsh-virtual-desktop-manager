@@ -54,7 +54,34 @@ powershell -NoProfile -ExecutionPolicy Bypass -File scripts\install.ps1 -Remove
 
 装完重开 DSH。桌面版不能用 `--dump-config` 检查（profile 由 Electron 独占管理）。
 
-装好后在任意会话里直接调 `vdm_capabilities`，看到 `虚拟桌面 COM 可用` 就通了。
+不想开命令行的话，直接双击 `scripts\install.cmd`——内容一样，只是带 `pause` 让你看清输出。
+
+### 装完先自检（强烈建议）
+
+```powershell
+cd "D:/Deepseek Harness/dsh-virtual-desktop-manager"
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts\verify-install.ps1
+```
+
+它查四处是否真的落地（`dependencies` / `dsh.profile.bundles` / `pnpm-lock.yaml` / `node_modules`），再用**装着的那份拷贝**跑一次原生助手冒烟测试，最后打印当前桌面与窗口列表。全绿再重开 DSH。
+
+### 排错：安装"看起来成功"但 DSH 里没有 `vdm_*` 工具
+
+实测踩到过：DSH 还开着时安装，pnpm 会卡住，600 秒后被强杀，日志里只剩
+
+```
+Progress: resolved 267, reused 8, downloaded 0, added 2
+dsh: pnpm printed nothing for 600000ms and was terminated
+```
+
+结果是一种半成品状态——**文件已经拷进 `node_modules` 了，但 `dependencies`、`dsh.profile.bundles`、`pnpm-lock.yaml` 三处一个都没写**。命令退出码看起来正常，重开 DSH 却什么都没有。
+
+处理：确认 DSH 已完全退出（`Get-Process -Name 'DeepSeek Harness'` 无输出），再跑 `install.ps1`。`verify-install.ps1` 会直接把这种状态标红。真清不干净就 `install.ps1 -Remove` 后重装。
+
+另外两点经验：
+
+- 在运行中的 DSH 里用插件管理器（`plugin_manager` 工具）装也一样会卡在同一步，不是脚本的问题。
+- 装到一次性 profile（`--profile vdm-test`）只用 647ms 就成功了，所以卡住的原因确定是**运行中 profile 的文件占用**，不是包本身或 `file:` 跨盘依赖的问题。
 
 ### 原生助手
 
@@ -157,7 +184,10 @@ native/Interop/Desktop.cs  虚拟桌面 COM（公开 + 内部接口、GUID、vta
 native/Interop/Win32.cs    P/Invoke
 native/Support/*.cs       窗口枚举、PrintWindow 截图、CreateProcess 启动、完整性级别
 native/Commands/*.cs      各命令实现
-scripts/build-host.ps1    离线构建
+scripts/build-host.ps1    离线构建原生助手（重定向所有 dotnet 目录，不联网）
+scripts/install.ps1       装/卸 profile（必须在 DSH 完全退出后跑）
+scripts/install.cmd       双击版安装入口（带 pause）
+scripts/verify-install.ps1 安装落地校验 + 原生层冒烟
 tests/*.mjs               单元测试 + 原生层冒烟
 ```
 

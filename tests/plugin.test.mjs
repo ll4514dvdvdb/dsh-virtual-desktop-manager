@@ -1,5 +1,5 @@
 // 插件装载测试：不依赖 DSH 运行时，用 mock ctx 走一遍 apply()。
-// 目的：保证 14 个工具的 schema 合法、Game Mode 拦截在"真正调用原生助手之前"就生效
+// 目的：保证 16 个工具的 schema 合法、Game Mode 拦截在"真正调用原生助手之前"就生效
 // （拦截类用例绝不能真的去启动程序或切桌面）。
 import assert from 'node:assert/strict'
 import { mkdtempSync, rmSync } from 'node:fs'
@@ -42,6 +42,8 @@ const EXPECTED_TOOLS = [
   'vdm_launch_in_desktop',
   'vdm_capture_window',
   'vdm_close_window',
+  'vdm_uia_tree',
+  'vdm_uia_act',
   'vdm_game_mode',
 ]
 
@@ -63,7 +65,7 @@ after(() => {
   }
 })
 
-test('注册了全部 14 个工具，名字与预期一致', () => {
+test('注册了全部 16 个工具，名字与预期一致', () => {
   assert.deepEqual(registered.map((t) => t.name).sort(), [...EXPECTED_TOOLS].sort())
 })
 
@@ -187,4 +189,41 @@ test('Game Mode 下前台窗口移动被额外限制', async () => {
   )
   assert.equal(out.ok, false)
   assert.equal(out.code, 'game_mode_blocks')
+})
+
+test('Game Mode 下 uia_tree 不被拦（只读，不碰目标程序）', async () => {
+  state.writeState({ gameMode: true, pending: [] })
+  const tool = registered.find((t) => t.name === 'vdm_uia_tree')
+  // 故意给不存在的句柄：只要不是 game_mode_blocks，就说明只读读取没有被拦
+  const out = await tool.execute({ hwnd: '0xDEAD' }, {})
+  assert.notEqual(out.code, 'game_mode_blocks')
+})
+
+test('Game Mode 下 uia_act 默认被拦，focus 即使 allowInGameMode 也拦', async () => {
+  state.writeState({ gameMode: true, pending: [] })
+  const tool = registered.find((t) => t.name === 'vdm_uia_act')
+
+  const blocked = await tool.execute({ hwnd: '0xDEAD', path: '0/1', action: 'invoke' }, {})
+  assert.equal(blocked.ok, false)
+  assert.equal(blocked.code, 'game_mode_blocks')
+  assert.match(blocked.text, /allowInGameMode/)
+
+  const focusBlocked = await tool.execute(
+    { hwnd: '0xDEAD', path: '0/1', action: 'focus', allowInGameMode: true },
+    {},
+  )
+  assert.equal(focusBlocked.ok, false)
+  assert.equal(focusBlocked.code, 'game_mode_blocks')
+  assert.match(focusBlocked.text, /提到前台/)
+
+  // focus 被拦不进等待队列（它不是"等到用户允许就能做"的事，而是永远不允许）
+  const pendingAfterFocus = state.readState().pending.map((p) => p.reason).join('\n')
+  assert.doesNotMatch(pendingAfterFocus, /focus/)
+})
+
+test('Game Mode 关闭后 uia_act 不再被 gate 拦（错误来自原生层）', async () => {
+  state.writeState({ gameMode: false, pending: [] })
+  const tool = registered.find((t) => t.name === 'vdm_uia_act')
+  const out = await tool.execute({ hwnd: '0xDEAD', path: '0/1', action: 'invoke' }, {})
+  assert.notEqual(out.code, 'game_mode_blocks')
 })

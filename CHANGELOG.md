@@ -1,5 +1,42 @@
 # 更新记录
 
+## 0.1.2 — UI Automation 控件级自动化
+
+补上需求里"GUI 自动化优先用 UI Automation，不要默认 SendInput"这一块。
+
+### 新增
+
+- **`vdm_uia_tree`**：读指定窗口的控件树（path / 类型 / 名称 / 自动 ID / 类名 / 是否可交互 / 位置）。
+  纯只读：不点击、不输入、不需要目标在前台、不需要切桌面。支持 `maxDepth` / `maxNodes` / `nameContains` 过滤。
+- **`vdm_uia_act`**：按控件执行 `invoke` / `setvalue` / `toggle` / `expand` / `collapse` / `select` / `focus` / `scroll`。
+  走 UIA pattern，**不发 `SendInput`、不按屏幕坐标点击**，所以不会打到用户正在操作的窗口上。
+  控件不支持该动作时返回 `succeeded:false` + `supportedPatterns`，绝不退回坐标点击。
+- 原生层新增 `native/Interop/Uia.cs`（读树 + 按路径解析元素 + pattern 调用）与 `native/Commands/UiaCmd.cs`。
+- `capabilities.commands` 增加 `uia_tree` / `uia_act`。
+- Game Mode 策略：`uia_tree` 任何时候都允许（只读）；`uia_act` 默认拦，需 `allowInGameMode:true`；
+  `focus` 即使在 `allowInGameMode:true` 下也**始终禁止**（它会把目标窗口提到前台），而且不进等待队列——
+  这是"永远不该做"的事，不是"等用户允许就能做"的事。
+
+### 实现中踩到的坑（都已解决，记录下来免得以后再撞）
+
+- **`CacheRequest` + `el.Cached` 在 Chromium 窗口上必抛 `InvalidOperationException`（"不能请求未缓存的属性或模式"）**。
+  试过两个"看起来对"的修法都无效：把 `GetSupportedPatterns()` 从遍历里删掉；把 `AutomationElement.FromHandle()`
+  移进 `cache.Activate()` 内部。最后确认同样的窗口在 PowerShell 里直接读 `el.Current` 完全正常，
+  于是彻底不用 `CacheRequest`，统一走 `Current` 实时读取。代价是每节点每个属性一次跨进程往返（实测每节点 1~3 ms，
+  80 节点约 200 ms），换来的是"对真实窗口真的能读"。
+- **`WindowInfo.OnCurrentDesktop` 在 UIA 命令里是 `null`**：`Windows.Describe()` 只填窗口自身字段，
+  不查虚拟桌面。现在 `uia_tree` 单独调 `IsOnCurrentDesktop` / `WindowDesktop` 补全，查不到时写 warning 而不是当成功。
+- **`DesktopApi.WindowDesktop()` 返回 `Guid?`**，直接赋给 `Guid` 会编译失败（CS0266）。
+
+### 实测
+
+- `explorer.exe`：95 个节点，标题栏按钮标为可交互。
+- 记事本：`invoke` 「最小化」按钮 → `window_info` 确认 `minimized: false → true`（**控件级操作真实生效**，
+  全程没切桌面、没动鼠标）。
+- Chromium / Electron（DSH 自己）：只有 12 个节点，网页内容不暴露——这是 Chromium 的默认行为，已写进限制文档。
+- `npm test`：42 个用例全绿（新增 3 个 Game Mode × UIA 断言）。
+- `node tests/tools-live.mjs`：55 项通过 0 失败（新增 7 项 UIA 断言）。
+
 ## 0.1.1 — 工具层联调修复
 
 新增工具层集成测试（真的装载插件、真的调 `vdm_*` 工具，不 mock 链路本身），立刻抓出 5 个只在"工具之间衔接"时才暴露的缺陷。

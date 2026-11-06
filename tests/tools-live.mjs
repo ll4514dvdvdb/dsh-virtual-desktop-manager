@@ -97,7 +97,7 @@ console.log('=== vdm 工具层集成测试（直连原生助手，不经过 DSH�
 console.log('状态目录：' + stateRoot)
 console.log('')
 
-if (!ok('14 个 vdm_* 工具都已注册', tools.size === 14, `实际 ${tools.size} 个：${[...tools.keys()].join(', ')}`)) {
+if (!ok('16 个 vdm_* 工具都已注册', tools.size === 16, `实际 ${tools.size} 个：${[...tools.keys()].join(', ')}`)) {
   console.log('\n工具都没注册齐，后面的用例没有意义。')
   process.exit(1)
 }
@@ -112,6 +112,8 @@ if (caps.ok) {
   ok('构建号有结论', typeof d.buildSupported === 'boolean', `buildSupported=${d.buildSupported}`)
   const comOk = d.desktopApiAvailable === true
   ok('虚拟桌面 COM 可用', comOk, d.desktopApiError || '')
+  const cmds = Array.isArray(d.commands) ? d.commands : []
+  ok('原生层报了 uia_tree / uia_act 两个命令', cmds.includes('uia_tree') && cmds.includes('uia_act'), cmds.join(','))
   if (!comOk) {
     console.log('\n  COM 不可用，后续用例全部跳过（这通常是完整性级别/会话问题，不是代码问题）。')
     finish(2)
@@ -188,6 +190,37 @@ if (!target) {
     ok('图片通过 attachments 挂进了对话', savedImages.length > 0, `saveImages 收到 ${savedImages.length} 张`)
     ok('返回文本里说明了图片路径', typeof cap.text === 'string' && cap.text.includes(p || '\u0000'), show(cap))
   }
+}
+
+// 6.5 UI Automation（只读 + 错误路径；真实点击类操作要人工确认，不放进自动回归）
+console.log('\n[6.5] vdm_uia_tree / vdm_uia_act（UIA 控件级自动化）')
+if (!target) {
+  skipped.push('uia_tree / uia_act（没有可用窗口）')
+  console.log('  - 没有可用窗口，跳过')
+} else {
+  const tree = await call('vdm_uia_tree', { hwnd: target.hwnd, maxDepth: 4, maxNodes: 120 })
+  ok('uia_tree 返回 ok（UIA 真的能读到这个窗口）', tree.ok === true, tree.text)
+  if (tree.ok) {
+    const nodes = tree.data?.nodes || []
+    ok('至少读到根节点', nodes.length >= 1, `节点数 ${nodes.length}`)
+    ok('根节点 path 为空串、且带 type', nodes[0]?.path === '' && typeof nodes[0]?.type === 'string', nodes[0])
+    ok(
+      '每个节点都有 path/type/name 结构',
+      nodes.every((n) => typeof n.path === 'string' && typeof n.type === 'string' && typeof n.name === 'string'),
+      nodes.slice(0, 2),
+    )
+    ok('文本里有节点清单或"没读到控件"的解释', typeof tree.text === 'string' && tree.text.length > 30, show(tree))
+  }
+
+  const missing = await call('vdm_uia_act', { hwnd: target.hwnd, path: '99/99', action: 'invoke' })
+  ok(
+    '越界 path 明确报"找不到控件"，不静默失败',
+    missing.ok === false && (missing.code === 'uia_element_not_found' || /找不到控件/.test(missing.text || '')),
+    missing.text,
+  )
+
+  const noAction = await call('vdm_uia_act', { hwnd: target.hwnd, path: '' })
+  ok('缺 action 时报参数错误', noAction.ok === false, noAction.text)
 }
 
 // 7. 建 / 删桌面

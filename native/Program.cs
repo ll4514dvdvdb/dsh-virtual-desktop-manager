@@ -21,7 +21,7 @@ namespace VdmHost
 {
     internal static class Program
     {
-        private const string HostVersion = "0.1.1";
+        private const string HostVersion = "0.1.2";
 
         [STAThread]
         private static int Main(string[] args)
@@ -135,6 +135,12 @@ namespace VdmHost
                 case "launch":
                     return Commands.LaunchCmd.Run(api.Get(), input, warnings);
 
+                case "uia_tree":
+                    return Commands.UiaCmd.Tree(api.Get(), input, warnings);
+
+                case "uia_act":
+                    return Commands.UiaCmd.Act(api.Get(), input, warnings);
+
                 default:
                     throw new VdmException("unknown_command", $"未知命令 {command}。已知命令见 capabilities。");
             }
@@ -160,6 +166,7 @@ namespace VdmHost
                         "ping", "capabilities", "list_desktops", "get_current_desktop", "create_desktop",
                         "switch_desktop", "remove_desktop", "list_windows", "window_info",
                         "move_window", "capture_window", "close_window", "launch",
+                        "uia_tree", "uia_act",
                     } },
             };
 

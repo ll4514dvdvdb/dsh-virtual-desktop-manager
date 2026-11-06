@@ -113,10 +113,31 @@ node tests/host-smoke.mjs # 冒烟：COM 是否可用 + 桌面/窗口能否读�
 | `vdm_move_window` | 把窗口移到指定桌面 | **前台窗口直接拒绝**，除非 `allowForeground:true` |
 | `vdm_launch_in_desktop` | 启动 EXE 并把主窗口移到目标桌面 | 返回 PID/HWND/是否抢前台/样式是否真生效 |
 | `vdm_capture_window` | PrintWindow 抓单窗口（`PW_RENDERFULLCONTENT`） | 空白检测；空白**不许**当正常 |
+| `vdm_uia_tree` | UI Automation 读控件树（类型/名称/自动 ID/是否可交互） | 纯只读；不需要前台、不需要切桌面 |
+| `vdm_uia_act` | 按控件执行 invoke/setvalue/toggle/expand/collapse/select/focus/scroll | 不发鼠标键盘；不支持就报 `succeeded:false`，**不退回坐标点击** |
 | `vdm_close_window` | 发 `WM_CLOSE`（不是强杀） | 默认 `dryRun:true`；high 风险需 `force:true` |
 | `vdm_game_mode` | Game Mode 开关/状态/等待队列 | `off` **必须 `authorized:true`** |
 
 所有工具都返回中文 `text`（给人看）+ 结构化 `data`（给下一步用）；每次调用写审计日志。
+
+### 为什么 GUI 自动化走 UI Automation 而不是模拟鼠标键盘
+
+虚拟桌面**不是独立会话**。`SendInput` 打进的是当前会话的输入队列，会原封不动打到用户正在玩的那一局游戏里；
+按屏幕坐标点击还依赖窗口位置和 DPI，窗口在别的桌面时坐标根本没意义。
+
+UIA 的 `Invoke`/`SetValue`/`Toggle` 是**跨进程、针对具体控件**的操作：不需要目标在前台，不需要切换桌面，
+不会移动鼠标。代价是它依赖目标程序自己实现 UIA —— 见下面的"已知限制"。
+
+`focus` 是个例外：它会把焦点交给目标控件（可能把窗口提到前台），所以 Game Mode 下**即使传 `allowInGameMode:true` 也禁止**。
+
+实测样本（Win11 25H2 / build 26200）：
+
+| 目标 | `vdm_uia_tree` 结果 | 能否 `uia_act` |
+|---|---|---|
+| 文件资源管理器 | 95 个节点，标题栏按钮标为可交互 | 能（`invoke` 真生效） |
+| 记事本（Win11 版） | 7 个节点，只有外壳 + 标题栏按钮 | 能（实测 `invoke` 最小化，`window_info` 确认 `minimized` 变了） |
+| 微信 / Steam | 1~4 个节点，只有外壳 | 读得到但内容极少（自绘 UI） |
+| DeepSeek Harness（Electron） | 12 个节点，只有标题栏按钮 | 读不到网页内容（Chromium 默认不暴露） |
 
 ## 典型工作流
 
@@ -126,8 +147,10 @@ node tests/host-smoke.mjs # 冒烟：COM 是否可用 + 桌面/窗口能否读�
 3. vdm_ensure_workspace_desktop           拿到 AI 工作桌面的 GUID
 4. vdm_launch_in_desktop {path, desktopId} 启动你的程序，窗口秒移走
 5. vdm_capture_window {hwnd}              截图看界面（不截你屏幕）
-6. vdm_list_windows {desktopId}           确认窗口状态
-7. vdm_close_window {hwnd, dryRun:false}  收尾
+6. vdm_uia_tree {hwnd}                    看有哪些控件（只读，不打扰）
+7. vdm_uia_act {hwnd, path, action}       直接点/填，不碰鼠标键盘
+8. vdm_list_windows {desktopId}           确认窗口状态
+9. vdm_close_window {hwnd, dryRun:false}  收尾
 ```
 
 ## Game Mode
@@ -155,7 +178,7 @@ node tests/host-smoke.mjs # 冒烟：COM 是否可用 + 桌面/窗口能否读�
 - **前台窗口保护**：`move_window` 对 `GetForegroundWindow()` 命中的窗口直接抛 `target_is_foreground`。想动它必须显式 `allowForeground:true`，Game Mode 下连这个口子都堵死。
 - **启动后的窗口不同待遇**：刚由我们启动、刚识别到的窗口即使抢了前台也照样移走——因为它正是该被移走的那个。想反过来保护用 `avoidForegroundMove`。
 - **不切屏是默认路径**：`switch_desktop` 是唯一改变你眼前画面的操作，必须 `authorized:true`。
-- **不模拟全局输入**：不调用 `SendInput`、不模拟 `Win+Ctrl+D`、不点鼠标。桌面创建走 COM，不靠快捷键。
+- **不模拟全局输入**：不调用 `SendInput`、不模拟 `Win+Ctrl+D`、不点鼠标、不按屏幕坐标点击。桌面创建走 COM，不靠快捷键；控件操作走 UI Automation 的 pattern。
 - **不抢焦点**：还原最小化窗口用 `SW_SHOWNOACTIVATE`，不激活。
 - **不静默失败**：窗口句柄要按 `EnumWindows` 实时查，桌面每次操作重新枚举校验，全部写日志。
 - **不把空白当成功**：`capture_window` 采样统计颜色分布，`qualityVerdict: "blank_or_uncapturable"` 时提示"GPU 直出/受保护内容，不能当作软件运行正常"。
@@ -183,7 +206,7 @@ native/Program.cs        命令分发 + 响应封装（{ok,data,warnings,elapsed
 native/Interop/Desktop.cs  虚拟桌面 COM（公开 + 内部接口、GUID、vtable）
 native/Interop/Win32.cs    P/Invoke
 native/Support/*.cs       窗口枚举、PrintWindow 截图、CreateProcess 启动、完整性级别
-native/Commands/*.cs      各命令实现
+native/Commands/*.cs      各命令实现（含 UiaCmd.cs）
 scripts/build-host.ps1    离线构建原生助手（重定向所有 dotnet 目录，不联网）
 scripts/install.ps1       装/卸 profile（必须在 DSH 完全退出后跑）
 scripts/install.cmd       双击版安装入口（带 pause）

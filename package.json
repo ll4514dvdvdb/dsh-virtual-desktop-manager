@@ -1,6 +1,6 @@
 {
   "name": "dsh-virtual-desktop-manager",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "Windows 虚拟桌面管理插件：让 AI Agent 在独立的 AI 工作桌面里启动、管理、截图 GUI 应用，不主动切换也不抢占用户正在使用的桌面；带全局 Game Mode 硬开关与审计日志",
   "type": "module",
   "main": "index.js",

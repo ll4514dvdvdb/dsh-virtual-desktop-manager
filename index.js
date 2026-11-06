@@ -604,6 +604,102 @@ export function apply(ctx, config = {}) {
     },
   })
 
+  // 12.5 UIA 控件树 --------------------------------------------------------
+  register({
+    name: 'vdm_uia_tree',
+    description:
+      '用 UI Automation 读取指定窗口的控件树（类型/名称/自动 ID/是否可交互/位置）。只读：不点击、不输入、不需要目标在前台、不需要切换桌面，因此不影响用户当前正在做的事。已知边界：Electron/Chromium 应用默认不向 UIA 暴露网页内容；微信等自绘界面可能只有外壳；窗口在别的虚拟桌面时内容也可能退化。',
+    parameters: {
+      type: 'object',
+      properties: {
+        hwnd: { type: ['string', 'number'], description: '窗口句柄。' },
+        maxDepth: { type: 'number', description: '最大深度，默认 3，上限 12。' },
+        maxNodes: { type: 'number', description: '最大节点数，默认 150，上限 800。调大能看更多，也会更慢。' },
+        nameContains: {
+          type: 'string',
+          description: '只保留名称/自动 ID/类名/类型里包含该子串的节点（根节点始终保留）。',
+        },
+      },
+      required: ['hwnd'],
+      additionalProperties: false,
+    },
+    output: TEXT_OUTPUT,
+    timeoutMs: cfg.defaultTimeoutMs,
+    run: async (args) => {
+      const r = await call('uia_tree', {
+        hwnd: String(args.hwnd),
+        maxDepth: clampInt(args.maxDepth, 0, 12, 3),
+        maxNodes: clampInt(args.maxNodes, 1, 800, 150),
+        nameContains: args.nameContains == null ? '' : String(args.nameContains),
+      })
+      const text = [fmt.fmtUiaTree(r.data), ...r.warnings.map((w) => `⚠ ${w}`)].join('\n')
+      return { ok: true, text, data: r.data }
+    },
+  })
+
+  // 12.6 UIA 控件操作 ------------------------------------------------------
+  register({
+    name: 'vdm_uia_act',
+    description:
+      '对指定控件执行一个 UI Automation 动作（invoke/setvalue/toggle/expand/collapse/select/focus/scroll）。不需要鼠标键盘、不按屏幕坐标、不需要目标在前台，所以不会打到用户正在操作的窗口上。path 来自 vdm_uia_tree，只在这一瞬间有效。控件不支持该动作时返回 succeeded:false 并列出它支持的 pattern，绝不退回坐标点击。',
+    parameters: {
+      type: 'object',
+      properties: {
+        hwnd: { type: ['string', 'number'], description: '窗口句柄。' },
+        path: { type: 'string', description: '控件路径，如 "0/2/1"；空字符串表示窗口根节点。' },
+        action: {
+          type: 'string',
+          enum: ['invoke', 'setvalue', 'toggle', 'expand', 'collapse', 'select', 'focus', 'scroll'],
+          description: '要执行的动作。focus 会改变前台焦点，Game Mode 下始终禁止。',
+        },
+        value: { type: 'string', description: 'setvalue 要写入的文本（其它动作忽略）。' },
+        allowInGameMode: {
+          type: 'boolean',
+          description: 'Game Mode 下是否允许（默认拒绝）。focus 即使传 true 也不允许。',
+        },
+      },
+      required: ['hwnd', 'path', 'action'],
+      additionalProperties: false,
+    },
+    output: TEXT_OUTPUT,
+    timeoutMs: cfg.defaultTimeoutMs,
+    gate: async (args) => {
+      if (!gameModeOn()) return null
+      const action = String(args?.action || '').toLowerCase()
+      if (action === 'focus') {
+        return {
+          code: 'game_mode_blocks',
+          reason: 'UIA focus：Game Mode 下禁止改变前台焦点',
+          queue: false,
+          text: [
+            'Game Mode 已开启，focus 会把焦点交给目标控件，可能把目标窗口提到前台，因此即使 allowInGameMode:true 也不允许。',
+            '其余动作（invoke/setvalue/toggle/expand/collapse/select/scroll）不改变前台窗口，可以带 allowInGameMode: true 重试。',
+          ].join('\n'),
+        }
+      }
+      if (args?.allowInGameMode === true) return null
+      return {
+        code: 'game_mode_blocks',
+        reason: 'UIA 动作：Game Mode 下默认不操作系统控件',
+        text: [
+          'Game Mode 已开启，UIA 动作默认被拦住（已进等待队列）。',
+          '如果确定目标窗口不是用户正在用的程序、且动作不是 focus，可以带 allowInGameMode: true 重试。',
+          '只读的 vdm_uia_tree 不受限制，随时可用。',
+        ].join('\n'),
+      }
+    },
+    run: async (args) => {
+      const r = await call('uia_act', {
+        hwnd: String(args.hwnd),
+        path: args.path == null ? '' : String(args.path),
+        action: String(args.action),
+        value: args.value == null ? '' : String(args.value),
+      })
+      const text = [fmt.fmtUiaAct(r.data), ...r.warnings.map((w) => `⚠ ${w}`)].join('\n')
+      return { ok: true, text, data: r.data }
+    },
+  })
+
   // 13. 关闭窗口 -----------------------------------------------------------
   register({
     name: 'vdm_close_window',

@@ -19,6 +19,12 @@
   <ItemGroup>
     <Reference Include="System.Web.Extensions" />
     <Reference Include="System.Drawing" />
+    <!-- UI Automation：只做"针对指定窗口"的控件级操作，绝不发全局鼠标键盘事件。
+         UIAutomationClient/Types 是 .NET Framework 自带的 GAC 程序集，不引入任何第三方包。 -->
+    <Reference Include="UIAutomationClient" />
+    <Reference Include="UIAutomationTypes" />
+    <!-- UIA 的 BoundingRectangle 是 System.Windows.Rect，定义在 WindowsBase 里；同样是框架自带。 -->
+    <Reference Include="WindowsBase" />
   </ItemGroup>
 
 </Project>

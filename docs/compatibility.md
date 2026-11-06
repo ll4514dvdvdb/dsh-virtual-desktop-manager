@@ -20,6 +20,23 @@
 - 进程完整性 **Medium (0x2000)**，`asInvoker`
 - 结果：`desktopApiAvailable:true`，`desktopCount:3`，`list_windows` 能读到 Electron / Win32 / Store 应用窗口
 
+## UI Automation 依赖
+
+`vdm_uia_tree` / `vdm_uia_act` 用 .NET Framework 自带的 `UIAutomationClient` / `UIAutomationTypes` / `WindowsBase`
+（GAC 内置，不引入第三方包，Windows 7 起就有）。
+
+版本相关的只有一点：**UIA provider 由目标程序自己实现**，Windows 版本给不出保证。
+Windows 11 25H2 上的实测样本见 [limits.md](limitations.md) 第 3.5 节。
+
+已知的 UIA 行为差异：
+
+| 情况 | 表现 |
+|---|---|
+| 窗口在别的虚拟桌面（cloaked） | 内容可能退化成只有外壳，`note` 会提示 |
+| Chromium / Electron | 默认不暴露网页 DOM，只有原生外壳 |
+| 自绘 UI（微信、游戏） | 只有 1~4 个节点 |
+| 目标无响应（`IsHungAppWindow`） | 插件直接拒绝（`target_not_responding`），不让调用挂到超时 |
+| 控件不支持该 pattern | 返回 `succeeded:false` + `supportedPatterns`，不退回坐标点击 |
 ## 完整性级别要求（最容易踩的坑）
 
 内部 COM 接口要求调用进程至少 **Medium** 完整性：

@@ -39,6 +39,28 @@
 
 WGC（Windows Graphics Capture）没有实现——它能抓到一些 PrintWindow 抓不到的东西，但需要额外处理 D3D11 设备和帧超时，属于后续工作。
 
+## 3.5 UI Automation 读不到的东西
+
+`vdm_uia_tree` / `vdm_uia_act` 依赖目标程序**自己实现** UI Automation provider。这不是插件能补的。
+
+实测（Win11 25H2 / build 26200）：
+
+| 目标 | 节点数 | 说明 |
+|---|---|---|
+| 文件资源管理器 | 95 | 完整，标题栏按钮标为可交互 |
+| 记事本（Win11 版） | 7 | 只有外壳 + 标题栏；编辑区是独立渲染，UIA 里没有 Edit 控件 |
+| 微信 / Steam | 1~4 | 自绘 UI，只暴露外壳 |
+| DeepSeek Harness（Electron） | 12 | 只有标题栏按钮，**网页内容不暴露** |
+
+因此：
+
+- **Chromium / Electron 应用默认不向 UIA 暴露网页 DOM。** 程序自己带 `--force-renderer-accessibility` 之类的开关才可能拿到，这不是插件能强制的。
+- **自绘界面（微信、游戏、多数国产客户端）整体不可见**，只能截图 + 人工确认。
+- **窗口在别的虚拟桌面（cloaked）时内容可能退化**为只有外壳。`uia_tree` 的 `note` 会提示这一点，但退化本身无法避免。
+- **`path` 是索引路径**（`0/2/1`），界面一变就指向别的控件。每次操作前重新跑 `uia_tree`，不要缓存、不要跨会话复用。
+- **跨进程同步调用**：目标进程卡住时 UIA 调用也会跟着卡。插件先用 `IsHungAppWindow` 拒绝无响应窗口，但这只是第一道闸。
+- **不支持的动作不会被"绕过"**：控件没有该 pattern 时返回 `succeeded:false` + `supportedPatterns`，插件**不会**退回坐标点击（那会打到用户前台）。真需要点某个位置，只能切到目标桌面并让用户授权。
+
 ## 4. 内部 COM 接口随时可能失效
 
 `IVirtualDesktopManagerInternal` 是未公开接口，GUID 和 vtable 顺序靠社区逆向 + 社区标定。

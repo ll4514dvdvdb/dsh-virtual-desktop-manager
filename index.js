@@ -212,7 +212,8 @@ export function apply(ctx, config = {}) {
     parameters: { type: 'object', properties: {}, additionalProperties: false },
     run: async () => {
       const r = await call('capabilities', {})
-      return { ok: true, text: fmt.fmtCapabilities(r.data), data: r.data }
+      const data = { ...r.data, hostPath: hostPath() }
+      return { ok: true, text: fmt.fmtCapabilities(data), data }
     },
   })
 

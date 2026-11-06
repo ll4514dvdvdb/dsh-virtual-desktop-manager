@@ -20,6 +20,21 @@ test('resolveHostPath 在包内找到 dist/vdmhost.exe', () => {
   assert.equal(resolveHostPath(PKG_DIR, {}), HOST)
 })
 
+test('显式 hostPath 写错时当场报错，不静默回退到包内 exe', () => {
+  const bogus = join(PKG_DIR, '__not_here__', 'vdmhost.exe')
+  assert.throws(
+    () => resolveHostPath(PKG_DIR, { hostPath: bogus }),
+    (err) => {
+      if (!(err instanceof HostNotFoundError)) return false
+      assert.equal(err.code, 'host_not_found')
+      // 必须把用户写错的路径原样打出来，否则用户不知道哪里错了
+      assert.ok(err.message.includes(bogus), '报错里要出现那个错误路径')
+      assert.ok(err.message.includes('留空'), '要给出怎么处理')
+      assert.deepEqual(err.searched, [bogus])
+      return true
+    },
+  )
+})
 test('resolveHostPath 支持显式 hostPath 覆盖', () => {
   if (!hostBuilt) return
   assert.equal(resolveHostPath(PKG_DIR, { hostPath: HOST }), HOST)

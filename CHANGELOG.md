@@ -19,6 +19,10 @@
 
 ### 修复
 
+- **配置里 `hostPath` 写错时静默回退**：`resolveHostPath()` 原来是"候选列表取第一个存在的"，
+  显式配了路径但文件不存在时会悄悄用包内 `dist/vdmhost.exe`——你以为在跑刚编译的版本，实际跑的是旧的。
+  现在显式配置写错就当场 `host_not_found`，报错里原样回显那个错路径并提示"留空则自动查找"。
+  `vdm_capabilities` 的文本末尾也会打出实际使用的 `原生助手：<路径>`，一眼能确认跑的是哪份。
 - **未归属桌面的窗口返回全零 GUID**：刚创建、还没被 shell 分配到桌面的窗口（实测 DSH 的"打开"对话框），
   `IVirtualDesktopManager.GetWindowDesktopId` 会"成功"返回 `00000000-0000-0000-0000-000000000000`。
   全零不是任何真实桌面，此前被当成有效 id 传播，导致 `onCurrentDesktop:true` 与 `virtualDesktopId` 矛盾、

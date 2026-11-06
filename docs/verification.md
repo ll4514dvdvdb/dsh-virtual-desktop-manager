@@ -85,13 +85,24 @@
 | 源码与已装副本一致性 | `index.js` / `lib/*.js` / `dist/vdmhost.exe` / `cordis.patch.yml` / `package.json` 哈希全部一致 |
 | 一次性 profile 交叉验证 | `--profile vdm-test` 装完 `--dump-config` 输出含 `- id: virtual-desktop-manager`；在副本里跑 `tools-live` 56/56 |
 
-## 七、尚未验证（诚实标注）
+## 七、`hostPath` 配置分支（已验）
+
+`resolveHostPath()` 支持用配置项 `hostPath` 指定原生助手的位置。两个方向都实测过：
+
+| 场景 | 结果 |
+|---|---|
+| 指向真实路径（含空格：`D:/Deepseek Harness/.../dist/vdmhost.exe`） | 用它，`vdm_capabilities` 文本末尾打出 `原生助手：<该路径>` |
+| 指向不存在的路径 | `ok:false` + `code: host_not_found`，报错里原样回显那个错路径，并提示"留空则自动用包内 dist" |
+
+早期实现是"候选列表取第一个存在的"，显式路径写错会**静默回退**到包内 exe——那会让你以为在跑刚编译的版本，实际跑的是旧的。已改成显式配置写错就当场报错。回归用例：`tests/bridge.test.mjs` 的「显式 hostPath 写错时当场报错，不静默回退到包内 exe」。
+
+## 八、尚未验证（诚实标注）
 
 这几项只有在**重启 DSH 之后**才能验，本机当时有其他任务在跑，没有重启：
 
 1. **DSH 运行时里真的出现 16 个 `vdm_*` 工具**——安装落地与 `--dump-config` 已证明会加载，但"重启后在会话里调得到"这一步没在本机跑过。
 2. **`vdm_capture_window` 的图片能否挂进对话**——`attachments.saveImages` 的四种失败分支有单测（`attachImage` 返回 `note`），成功分支只在 mock 里跑过。
 3. **Game Mode 全链路在真实 DSH 会话里**（当前是在 `tools-live` 里直接调工具函数验证的，绕过 DSH 调度层）。
-4. **`launch` 在 DSH 内被调用的完整链路**（含 `hostPath` 解析走配置分支）。
+4. **`launch` 在 DSH 内被调用的完整链路**（`hostPath` 配置分支本身已单独验过，见上一节；缺的是"由 DSH 调度层发起"这一段）。
 
 重启后一条 `vdm_capabilities` 就能确认第 1 项；其余三项按 README 的典型工作流各跑一次即可。

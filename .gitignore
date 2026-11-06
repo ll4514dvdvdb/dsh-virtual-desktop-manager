@@ -1,0 +1,14 @@
+# 构建中间产物与本地状态，不进仓库
+# 注意：dist/ 里的 vdmhost.exe 是刻意入库的成品（约 54KB），不要忽略
+.build/
+bin/
+obj/
+_out/
+.appdata/
+.dotnet-home/
+.nuget-packages/
+node_modules/
+_test-out/
+*.user
+*.suo
+.vs/

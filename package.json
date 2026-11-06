@@ -1,0 +1,61 @@
+{
+  "name": "dsh-virtual-desktop-manager",
+  "version": "0.1.0",
+  "description": "Windows 虚拟桌面管理插件：让 AI Agent 在独立的 AI 工作桌面里启动、管理、截图 GUI 应用，不主动切换也不抢占用户正在使用的桌面；带全局 Game Mode 硬开关与审计日志",
+  "type": "module",
+  "main": "index.js",
+  "exports": {
+    ".": "./index.js",
+    "./package.json": "./package.json"
+  },
+  "author": "ll4514dvdvdb",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ll4514dvdvdb/dsh-virtual-desktop-manager.git"
+  },
+  "homepage": "https://github.com/ll4514dvdvdb/dsh-virtual-desktop-manager#readme",
+  "bugs": {
+    "url": "https://github.com/ll4514dvdvdb/dsh-virtual-desktop-manager/issues"
+  },
+  "files": [
+    "index.js",
+    "lib/*.js",
+    "dist/vdmhost.exe",
+    "dist/vdmhost.exe.config",
+    "cordis.patch.yml",
+    "README.md",
+    "LICENSE",
+    "CHANGELOG.md",
+    "docs/*.md",
+    "tests/*.mjs"
+  ],
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    }
+  },
+  "keywords": [
+    "dsh",
+    "dsh-plugin",
+    "deepseek-harness",
+    "virtual-desktop",
+    "windows",
+    "windows-11",
+    "gui-automation",
+    "window-management"
+  ],
+  "engines": {
+    "node": ">=18",
+    "dsh": ">=0.2.0-rc.1 <0.3.0"
+  },
+  "os": [
+    "win32"
+  ],
+  "scripts": {
+    "build:host": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/build-host.ps1",
+    "test": "node --test tests/format.test.mjs tests/state.test.mjs tests/bridge.test.mjs tests/plugin.test.mjs",
+    "test:all": "npm run test && npm run test:host",
+    "test:host": "node tests/host-smoke.mjs"
+  }
+}

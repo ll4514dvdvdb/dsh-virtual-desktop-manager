@@ -1,0 +1,15 @@
+# 插件装配补丁。安装器读取 package.json 的 dsh.bundle.patch 后应用这里的 insert 段。
+#
+# config 里刻意不写死任何本机路径：
+#   hostPath 留空 → 自动用包内 dist/vdmhost.exe
+#   状态目录固定 ~/.dsh/virtual-desktop-manager/（可用环境变量 VDM_STATE_DIR 覆盖）
+- insert:
+    - id: virtual-desktop-manager
+      name: 'virtual-desktop-manager'
+      inject: [tools]
+      config:
+        hostPath: ''
+        workspaceDesktopName: 'AI 工作桌面'
+        defaultTimeoutMs: 25000
+        captureTimeoutMs: 30000
+        audit: true

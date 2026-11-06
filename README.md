@@ -2,7 +2,7 @@
 
 让 DeepSeek Harness（DSH）在**独立的 Windows 虚拟桌面**里启动、管理、截图 GUI 应用，而不是随时抢占你正在用的那个桌面。
 
-14 个工具，覆盖：枚举/创建/切换/删除虚拟桌面，列出/检查/移动窗口，在指定桌面启动程序，窗口级截图，安全关闭窗口，以及一个由你本人控制的全局 **Game Mode**。
+16 个工具，覆盖：枚举/创建/切换/删除虚拟桌面，列出/检查/移动窗口，在指定桌面启动程序，窗口级截图，UI Automation 控件操作，安全关闭窗口，以及一个由你本人控制的全局 **Game Mode**。
 
 > **先明确边界，别被"虚拟桌面"这个词骗了**
 >
@@ -14,6 +14,19 @@
 > - ✅ 隔离的是**可见性**：AI 桌面上的窗口不会出现在你眼前，不会抢你的视觉焦点，你可以继续在主桌面玩游戏。
 >
 > 本插件提供的安全来自**行为约束**（Game Mode、前台保护、授权开关、只用窗口级 API），不是来自隔离。
+
+## 30 秒判断适不适合你
+
+**适合**：你一边用主桌面干活/打游戏，一边想让 AI 在后台跑 GUI 测试——启动 Android Studio、打开浏览器跑页面、截个图看看界面对不对——而**不想让这些窗口跳到你眼前**，也不想 AI 乱动鼠标键盘。
+
+**不适合**：
+
+| 你的需求 | 为什么这里不行 |
+|---|---|
+| 真正的隔离（跑不信任程序、隔离权限/网络） | 虚拟桌面不是安全边界，同一用户同一会话，权限完全一样。用 Hyper-V、Windows 沙箱、独立账户或容器 |
+| 独占 GPU 做渲染测试 | 不隔离 GPU，AI 桌面里的程序照样占你的显卡 |
+| 隔离键鼠输入 | 别的软件照样能往当前会话注入输入；本插件只是自己不发 |
+| 远程/多显示器独立桌面 | 这不是 RDP 多会话，只有一个可见桌面 |
 
 ## 为什么是"Node 插件 + C# 原生助手"两层
 
@@ -173,6 +186,26 @@ UIA 的 `Invoke`/`SetValue`/`Toggle` 是**跨进程、针对具体控件**的操
 9. vdm_close_window {hwnd, dryRun:false}  收尾
 ```
 
+### 一次真实往返（不是示意，是实测输出节选）
+
+在 AI 工作桌面里启动记事本，然后**不碰鼠标键盘**把它最小化：
+
+```
+→ vdm_uia_tree {"hwnd":"0xD1C04","maxDepth":4}
+  [0] Window '无标题 - Notepad'
+    [0/1] Button '最小化'        可交互
+    [0/2] Button '最大化'        可交互
+    ...共 7 个节点
+
+→ vdm_uia_act {"hwnd":"0xD1C04","path":"0/1","action":"invoke"}
+  succeeded: true   pattern: Invoke   361ms
+
+→ vdm_window_info {"hwnd":"0xD1C04"}
+  minimized: false → true
+```
+
+全程：用户当前桌面始终是「主页面」，没有切换、没有抢占、没有 `SendInput`。
+
 ## Game Mode
 
 一个存在 `~/.dsh/virtual-desktop-manager/state.json` 里的全局开关，**只能由用户显式控制**。
@@ -231,14 +264,18 @@ scripts/build-host.ps1    离线构建原生助手（重定向所有 dotnet 目�
 scripts/install.ps1       装/卸 profile（DSH 开着也能装，卡住见"排错"一节）
 scripts/install.cmd       双击版安装入口（带 pause）
 scripts/verify-install.ps1 安装落地校验 + 原生层冒烟
-tests/*.mjs               单元测试 + 原生层冒烟 + 工具层真机联调
+tests/*.mjs               单元测试 + 原生层冒烟 + 工具层真机联调 + 桌面自愈实测
+docs/compatibility.md     Windows 版本矩阵、完整性级别、UIA 依赖
+docs/limitations.md       11 类已知限制（含实测现象）
 docs/verification.md      每个需求项对应的实现与实跑证据（含未验证项）
+LICENSE                   MIT + 第三方署名声明
+CHANGELOG.md              版本变更记录
 ```
 
 ## 测试
 
 ```powershell
-npm test              # 43 个用例：format / state / bridge / plugin 装载（纯 JS，不需要原生 exe）
+npm test              # 44 个用例：format / state / bridge / plugin 装载（纯 JS，不需要原生 exe）
 npm run test:host     # 原生层冒烟（只读命令，不建桌面不移动窗口）
 npm run test:live     # 工具层集成：真的调用 vdm_* 工具走完整链路（详见下方）
 npm run test:recreate # 删掉 AI 工作桌面再让它自己重建（验"用户手动删除"这条需求，有安全阀）
@@ -297,6 +334,40 @@ dsh plugin --profile desktop add "file:D:/Deepseek Harness/dsh-virtual-desktop-m
 - GPU 直出、DRM 受保护、硬件覆盖层窗口截出来可能是空白——检测得到，但抓不到。
 - 内部 COM 接口**未公开**，Windows 大版本更新可能失效。失效时插件会明确报"接口版本不匹配"，而不是静默乱切桌面。
 
+## 常见问题
+
+**Q：我在打游戏，这东西会不会突然把我桌面切走？**
+
+不会。切换桌面只有 `vdm_switch_desktop` 一个入口，需要你当次明确授权（`authorized:true`），Game Mode 下**任何情况都拒绝**。创建桌面走 COM（`CreateDesktop`），不模拟 `Win+Ctrl+D`，实测 `currentDesktopChanged:false`。
+
+**Q：它会不会往我游戏里发键盘鼠标？**
+
+不会，代码里没有 `SendInput` 的调用点。控件操作走 UI Automation 的 `Invoke`/`SetValue` 等 pattern，是跨进程针对具体控件的消息，不经过输入队列。唯一例外是 `vdm_uia_act` 的 `focus` 动作（会把焦点交给控件），Game Mode 下连它也禁掉。
+
+**Q：能让 AI 截我正在玩的游戏画面吗？**
+
+技术上能对任意 HWND 调 `vdm_capture_window`，但**不建议**，也没做任何优化。游戏多用 GPU 直出或独占全屏，`PrintWindow` 大概率抓到黑屏——插件会明确报 `qualityVerdict: "blank_or_uncapturable"` 而不是给你一张黑图当成功。
+
+**Q：为什么截图有时候是空的？**
+
+`PrintWindow` 拿不到：GPU 直出窗口、DRM 受保护内容（Netflix 之类）、部分硬件覆盖层、某些全屏独占程序。插件会采样统计颜色，判为空白时返回 `suspectedBlank:true` + 提示，`strict` 模式下直接报 `blank_capture`。**这是被设计成"必须报错"的**，不能把空白当软件正常。
+
+**Q：为什么不用 Windows.Graphics.Capture（WGC）？**
+
+WGC 能抓到更多窗口画面，但需要 D3D11 设备 + WinRT 投影，在 .NET Framework 4.7.2 里要额外引 `System.Runtime.WindowsRuntime` 和若干 WinMD 文件，构建复杂度和依赖都会上去；而且它可能触发系统的"正在录制"指示。MVP 选择 `PrintWindow` + 空白检测，够用且轻。如果你确实需要抓 GPU 窗口，这是一个明确的后续方向，不是做不到。
+
+**Q：Windows 更新后会不会坏？**
+
+可能会。内部 COM 接口在每个 Windows 大版本都可能变。插件会先读构建号（`IsBuildSupported(build) => build >= 26100`），不匹配时明确报"接口版本不匹配"，**不会静默乱来**。真失效了你会在 `vdm_capabilities` 里直接看到 `desktopApiAvailable:false` 和 HRESULT。
+
+**Q：会不会把我的程序强行杀掉？**
+
+不会。`vdm_close_window` 只发 `WM_CLOSE`（等于点右上角叉），全仓库没有 `TerminateProcess` 调用点。程序弹保存对话框时它会卡在那里，插件会提示"交给用户处理"，不会反复发消息也不会强杀。
+
+**Q：AI 会不会把我不该动的窗口移走？**
+
+三道闸：① 前台窗口直接拒绝（`target_is_foreground`）；② 子窗口/控件拒绝（`not_a_top_level_window`）；③ 移动"就在你当前桌面且可见"的窗口时，返回里必定带一条警告，说明它原本在你眼前。Game Mode 下移动窗口默认也拦住。
+
 ## 免责声明
 
 1. 本插件使用**未公开**的 Windows 内部 COM 接口（`IVirtualDesktopManagerInternal` 等）来创建/删除/切换虚拟桌面。微软不保证这些接口在未来的 Windows 版本中保持稳定，Windows 更新后本插件可能失效。
@@ -307,11 +378,41 @@ dsh plugin --profile desktop add "file:D:/Deepseek Harness/dsh-virtual-desktop-m
 6. 审计日志与截图保存在你本机 `~/.dsh/virtual-desktop-manager/`，不上传任何地方。截图可能包含敏感内容，自己注意清理。
 7. 按 MIT 许可"按现状"提供，不附带任何担保。使用本插件造成的窗口丢失、程序异常、桌面被误删等问题，作者不承担责任。
 
-## 致谢
+## 依赖与第三方组件
 
-- 虚拟桌面 COM 接口的 GUID 与 vtable 顺序参考 [MScholtes/VirtualDesktop](https://github.com/MScholtes/VirtualDesktop)（MIT, Copyright © 2017 Markus Scholtes）与 [saimanish1/logitech-ipc-protocol](https://github.com/saimanish1/logitech-ipc-protocol) 的交叉验证。
-- 本项目为独立实现，只借鉴接口约定，不复制上述项目的代码逻辑。
+本插件刻意做到**运行时零第三方依赖**，这有两层意思。
+
+### 运行时依赖：没有第三方包
+
+| 层 | 依赖 | 说明 |
+|---|---|---|
+| Node 插件层 | **无** | `package.json` 里 `dependencies` / `devDependencies` / `peerDependencies` 全部为空，只用 Node 内置模块（`node:child_process`、`node:fs`、`node:path`、`node:os`） |
+| 原生助手 | **无** | 只引用 .NET Framework 4.7.2 **GAC 自带**的程序集：`System.Drawing`、`System.Web.Extensions`（JSON）、`UIAutomationClient` / `UIAutomationTypes` / `WindowsBase`（UI Automation）。没有 NuGet 包，没有 vendored 库 |
+| 构建 | .NET SDK 或 MSBuild | 仅编译时需要，产物是单文件 `vdmhost.exe`（约 54KB） |
+
+.NET Framework 4.7.2 的引用程序集随 Windows 提供；`scripts/build-host.ps1` 还把 `APPDATA`/`LOCALAPPDATA`/`DOTNET_CLI_HOME`/`NUGET_PACKAGES` 全部重定向进工程目录，构建过程**不联网、不写用户目录**。
+
+### 参考实现与第三方代码
+
+虚拟桌面的创建/切换/删除**没有公开 API**，用的是未公开的 COM 接口。这些接口的 IID、CLSID 和 vtable 方法顺序来自社区逆向成果，本项目据此独立重写成 C# 声明：
+
+| 项目 | 用途 | 许可证 | 是否包含其代码 |
+|---|---|---|---|
+| [MScholtes/VirtualDesktop](https://github.com/MScholtes/VirtualDesktop) | 虚拟桌面内部 COM 接口的 GUID 常量与 vtable 方法顺序（主要参考，按其 24H2 版本的声明标定） | **MIT**，Copyright © 2017 Markus Scholtes | **否**。仅使用 GUID 与"第几个槽是哪个方法"这类事实性接口信息 |
+| [saimanish1/logitech-ipc-protocol](https://github.com/saimanish1/logitech-ipc-protocol) | 同一套接口约定的交叉验证（独立来源确认 vtable 顺序） | **MIT** | **否**。仅作交叉验证 |
+
+两个项目都采用 MIT 许可证，其许可证要求"在副本或实质部分中保留版权声明与许可声明"。本项目**没有复制它们的源代码**，只共享接口契约这类事实性信息——严格说 MIT 的署名义务不因此触发，但仍在此主动、明确地署名与致谢：没有这些公开的逆向成果，这个插件不可能存在。
+
+完整法律文本见 [LICENSE](LICENSE)（含英文的第三方署名声明）。
+
+### 致谢
+
+- **Markus Scholtes**（[MScholtes/VirtualDesktop](https://github.com/MScholtes/VirtualDesktop)）：多年持续跟进 Windows 各版本虚拟桌面 COM 接口的变更，本项目 24H2/25H2 的 vtable 标定直接受益于其工作。
+- **[saimanish1](https://github.com/saimanish1/logitech-ipc-protocol)**：提供了独立来源的接口交叉验证。
+- **DeepSeek Harness 插件系统**：本插件按 `dsh.bundle.patch` + `ctx.tools.register` 的既有规范实现，参考了 `ytdlp-vision` 等插件的结构。
 
 ## 许可
 
-MIT，见 [LICENSE](LICENSE)。
+本项目以 **MIT** 许可发布，见 [LICENSE](LICENSE)。
+
+简单说：可以商用、可以修改、可以再分发，保留版权与许可声明即可，不附带任何担保。使用未公开接口带来的失效风险见上面的「免责声明」。

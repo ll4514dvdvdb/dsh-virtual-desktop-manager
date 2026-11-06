@@ -66,7 +66,7 @@
 
 | 命令 | 结果 | 覆盖 |
 |---|---|---|
-| `npm test` | **42 / 42 通过** | `format.test.mjs` 12 个纯函数渲染用例；`state.test.mjs` 7 个状态/队列/审计；`bridge.test.mjs` 8 个 spawn 与错误归一化；`plugin.test.mjs` 15 个注册/契约/Game Mode gate |
+| `npm test` | **43 / 43 通过** | `format.test.mjs` 12 个纯函数渲染用例；`state.test.mjs` 7 个状态/队列/审计；`bridge.test.mjs` 8 个 spawn 与错误归一化；`plugin.test.mjs` 16 个注册/契约/Game Mode gate/错误码翻译 |
 | `node tests/host-smoke.mjs` | **全部通过（12 项）** | 直连原生助手：build、完整性、COM 可用、桌面枚举、当前桌面一致性、窗口字段与自洽 |
 | `node tests/tools-live.mjs` | **56 / 56 通过** | 真装载插件、真调 16 个工具：capabilities→桌面→窗口→截图→UIA→建删桌面→ensure→Game Mode 全链路→审计日志 |
 | `scripts/verify-install.ps1` | **安装完整** | 校验 deps / bundles / pnpm-lock / node_modules 四处，再用**装好的那份拷贝**跑 host-smoke |

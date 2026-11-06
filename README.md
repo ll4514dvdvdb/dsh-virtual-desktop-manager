@@ -238,7 +238,7 @@ docs/verification.md      每个需求项对应的实现与实跑证据（含未
 ## 测试
 
 ```powershell
-npm test              # 42 个用例：format / state / bridge / plugin 装载（纯 JS，不需要原生 exe）
+npm test              # 43 个用例：format / state / bridge / plugin 装载（纯 JS，不需要原生 exe）
 npm run test:host     # 原生层冒烟（只读命令，不建桌面不移动窗口）
 npm run test:live     # 工具层集成：真的调用 vdm_* 工具走完整链路（详见下方）
 npm run test:all      # 三个都跑

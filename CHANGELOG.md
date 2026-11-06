@@ -42,7 +42,7 @@
 - 记事本：`invoke` 「最小化」按钮 → `window_info` 确认 `minimized: false → true`（**控件级操作真实生效**，
   全程没切桌面、没动鼠标）。
 - Chromium / Electron（DSH 自己）：只有 12 个节点，网页内容不暴露——这是 Chromium 的默认行为，已写进限制文档。
-- `npm test`：42 个用例全绿（新增 3 个 Game Mode × UIA 断言）。
+- `npm test`：43 个用例全绿（新增 3 个 Game Mode × UIA 断言、1 个错误码翻译断言）。
 - `node tests/tools-live.mjs`：55 项通过 0 失败（新增 7 项 UIA 断言）。
 
 ## 0.1.1 — 工具层联调修复

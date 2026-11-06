@@ -847,7 +847,7 @@ async function attachImage(ctx, filePath) {
   }
 }
 
-function describeError(err, toolName) {
+export function describeError(err, toolName) {
   const code = err?.code || 'unknown'
   const parts = [`${toolName} 失败：${err?.message || String(err)}`]
   if (err?.code) parts.push(`错误码：${code}`)
@@ -866,6 +866,32 @@ function describeError(err, toolName) {
     parts.push('不能据此判断软件运行正常，请换方式验证（读日志、查进程状态、或用 UI Automation 取控件树）。')
   } else if (code === 'target_minimized') {
     parts.push('', '目标窗口处于最小化状态。要么传 allowRestore:true（会用不激活的方式还原），要么先把它切到非最小化。')
+  } else if (code === 'desktop_not_found') {
+    parts.push('', '这个桌面 GUID 已经不存在了——很可能被用户手动删掉了。')
+    parts.push('先跑 vdm_list_desktops 拿最新 GUID，或用 vdm_ensure_workspace_desktop 按名字重新获取/重建。不要沿用旧 GUID。')
+  } else if (code === 'invalid_hwnd') {
+    parts.push('', '窗口句柄已经失效（窗口被关掉或重建了）。重新跑 vdm_list_windows 拿新的 hwnd，不要复用旧句柄。')
+  } else if (code === 'last_desktop') {
+    parts.push('', '不能删除最后一个虚拟桌面。要重建的话，先建新的再删旧的。')
+  } else if (code === 'move_unconfirmed') {
+    parts.push('', '移动调用返回成功，但复查发现窗口仍在原来的桌面。不要对同一个窗口反复重试——')
+    parts.push('先用 vdm_window_info 看 cloaked / visible 状态，必要时交给用户手动确认。')
+  } else if (code === 'move_failed') {
+    parts.push('', '窗口还没进 shell 的视图集合，所以移不过去。常见于隐藏窗口或刚创建还没显示的窗口。')
+    parts.push('先让它显示出来（launch 时给 windowStyle:"normal"）再移；反复失败就交给用户，别反复切桌面。')
+  } else if (code === 'target_not_responding') {
+    parts.push('', '目标窗口无响应（IsHungAppWindow）。UIA 的同步调用会跟着一起卡住，所以直接拒绝了。')
+    parts.push('不要改成按坐标点击——那会打到用户正在用的窗口上。')
+  } else if (code === 'uia_element_not_found') {
+    parts.push('', '按 path 找不到控件，界面多半已经变了。重新跑 vdm_uia_tree 取最新路径，不要缓存旧的。')
+  } else if (code === 'launch_failed' || code === 'exe_not_found' || code === 'missing_path' || code === 'cwd_not_found') {
+    parts.push('', '程序没起来。确认 path 是完整的 EXE 路径（或确实在 PATH 里），工作目录存在。')
+  } else if (code === 'close_failed') {
+    parts.push('', 'WM_CLOSE 发出去了但窗口还开着，很可能弹了保存对话框。不要反复发、不要强杀，交给用户处理。')
+  } else if (code === 'host_timeout') {
+    parts.push('', '原生助手超时。目标程序可能卡住，或窗口太多；可调大超时，或先用 limit / desktopId 缩小范围。')
+  } else if (code === 'aborted') {
+    parts.push('', '调用被取消（用户中断或会话结束），不是失败。需要的话重跑一次。')
   } else if (code === 'host_not_found' || code === 'host_spawn_failed') {
     parts.push('', '原生助手起不来。先跑 vdm_capabilities；如果是 host_not_found，说明 dist/vdmhost.exe 没随包发布或没编译。')
   } else if (code === 'desktop_api_unavailable') {

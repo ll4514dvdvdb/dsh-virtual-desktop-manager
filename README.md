@@ -262,9 +262,20 @@ DSH 用 pnpm 装 `file:` 依赖时是**硬链接/拷贝**整个包到 `~/.dsh/pr
 
 | 改了什么 | 要做什么 |
 |---|---|
-| `lib/*.js`、`index.js` | 重新 `install.ps1`（或直接改 node_modules 里的副本）才会反映到运行中的 DSH |
-| `native/**/*.cs` | `npm run build:host` 重新生成 `dist/vdmhost.exe`，**然后**重新安装（副本里的 exe 不会自己更新） |
+| `lib/*.js`、`index.js` | **先 `remove` 再 `add`**（见下），否则改动不会进 `node_modules` |
+| `native/**/*.cs` | `npm run build:host` 重新生成 `dist/vdmhost.exe`，**然后** remove + add（副本里的 exe 不会自己更新） |
 | `scripts/`、`tests/`、文档 | 不用重装 |
+
+**这里有个实测出来的坑**：版本号没变时，`dsh plugin --profile desktop add "file:..."` 会直接说 `Already up to date` 并 **1.4 秒退出，一个字节都不拷**。所以光"重新安装"是没用的，必须：
+
+```powershell
+dsh plugin --profile desktop remove dsh-virtual-desktop-manager
+dsh plugin --profile desktop add "file:D:/Deepseek Harness/dsh-virtual-desktop-manager"
+```
+
+两条都是 1~2 秒（`file:` 依赖不需要联网）。跑完用 `Get-FileHash` 比一下 `index.js` 的哈希，或者直接 `verify-install.ps1`。
+
+如果你不想 remove（比如怕把 bundles 弄乱），也可以直接覆盖 `node_modules\dsh-virtual-desktop-manager\` 里对应的文件——`file:` 依赖没有内容哈希校验，pnpm 不会因此报错。但下次正式重装还是走 remove + add 更干净。
 
 改完想立刻验证原生层，不必等插件装载——直接 `node tests/host-smoke.mjs`，它走的是同一套 `bridge.js` 调用路径。
 

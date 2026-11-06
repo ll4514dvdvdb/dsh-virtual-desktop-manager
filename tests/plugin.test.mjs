@@ -11,7 +11,7 @@ import { fileURLToPath } from 'node:url'
 const root = mkdtempSync(join(tmpdir(), 'vdm-plugin-'))
 process.env.VDM_STATE_DIR = join(root, 'state')
 
-const { apply, name, inject } = await import('../index.js')
+const { apply, name, inject, describeError } = await import('../index.js')
 const state = await import('../lib/state.js')
 
 /** 最小可用的 ctx 桩：只提供 apply() 真正用到的东西 */
@@ -226,4 +226,35 @@ test('Game Mode 关闭后 uia_act 不再被 gate 拦（错误来自原生层）'
   const tool = registered.find((t) => t.name === 'vdm_uia_act')
   const out = await tool.execute({ hwnd: '0xDEAD', path: '0/1', action: 'invoke' }, {})
   assert.notEqual(out.code, 'game_mode_blocks')
+})
+
+test('错误码会翻译成可执行的中文下一步，未知错误码也不崩', () => {
+  const cases = [
+    ['desktop_not_found', /手动删掉/],
+    ['invalid_hwnd', /重新跑 vdm_list_windows/],
+    ['uia_element_not_found', /重新跑 vdm_uia_tree/],
+    ['move_unconfirmed', /反复重试/],
+    ['move_failed', /windowStyle:"normal"/],
+    ['target_not_responding', /无响应/],
+    ['close_failed', /交给用户处理/],
+    ['last_desktop', /最后一个/],
+    ['host_timeout', /超时/],
+    ['launch_failed', /路径/],
+    ['not_authorized', /明确授权/],
+    ['target_is_foreground', /游戏/],
+  ]
+  for (const [code, re] of cases) {
+    const text = describeError({ code, message: '触发失败' }, 'vdm_test')
+    assert.match(text, /错误码：/, `${code} 应该带上错误码行`)
+    assert.match(text, /触发失败/, `${code} 应该保留原始 message`)
+    assert.match(text, re, `${code} 的中文提示没覆盖关键点：${text}`)
+  }
+  // 没见过的错误码：保留原文，不抛异常、不吞掉
+  const unknown = describeError({ code: 'never_heard_of', message: 'boom' }, 'vdm_test')
+  assert.match(unknown, /boom/)
+  assert.match(unknown, /never_heard_of/)
+  // warnings 和 HRESULT 都要透传
+  const withWarn = describeError({ code: 'x', message: 'm', hresult: -2147024891, warnings: ['窗口已最小化'] }, 'vdm_test')
+  assert.match(withWarn, /80070005/)
+  assert.match(withWarn, /窗口已最小化/)
 })

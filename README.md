@@ -116,6 +116,33 @@ pnpm 在解析时会去 `registry.npmjs.org` 拉包（尤其是它想顺手把�
 - 装到一次性 profile（`--profile vdm-test`）通常 500~650ms 就完，因为那边没有要顺带升级的旧依赖。
 - **`dsh plugin add` 可能顺带改动别的包**：实测这次把 `billion-context` 从 0.1.209 升到了 0.1.212，还多塞了一个 `dsh-ops`（不在 `bundles` 里、和当前 DSH 版本不兼容）。不想要的用 `dsh plugin --profile desktop remove dsh-ops` 清掉即可（5 秒）。
 
+**现象 C：装得很干净，重开 DSH 后工具一个都不出现**
+
+这是 0.1.3 修掉的一个自己挖的坑，留在这里当排错参考。四处落地全 `[OK]`（deps / bundles / lockfile / `node_modules` 都在），但 DSH 启动日志里只有一行：
+
+```
+virtual-desktop-manager (virtual-desktop-manager): failed to import:
+Error [ERR_MODULE_NOT_FOUND]: Cannot find package 'virtual-desktop-manager'
+```
+
+根因在 `cordis.patch.yml`：
+
+```yaml
+- insert:
+    - id: virtual-desktop-manager              # 行标识，随便起
+      name: 'dsh-virtual-desktop-manager'      # ← 必须是 npm 包名，import 用的模块名
+```
+
+`name` 一度被写成了 `id` 的值。**`id` 是行标识，`name` 是 import 用的模块名，两者不能混。**
+包名恰好等于 `id` 的项目（例如 `ytdlp-vision`）不会暴露这个区别，所以特别容易踩。
+
+排查手段：
+
+- `verify-install.ps1` 现在有 3.5 节专门校验这条
+- `dsh --profile desktop --dump-config` 里搜不到 `# == dsh-virtual-desktop-manager` 就是没进插件树
+- `plugin_manager list_bundles` 看到 `"enabled": false` → `set_bundle enabled=true`；
+  改完 `cordis.patch.yml` 后要 `set_bundle false` 再来一次 `true` 才会重新加载，**不用重启 DSH**
+
 ### 原生助手
 
 `dist/vdmhost.exe`（约 54KB，单文件、零第三方依赖）随仓库一起分发，装完即可用。
@@ -165,12 +192,22 @@ UIA 的 `Invoke`/`SetValue`/`Toggle` 是**跨进程、针对具体控件**的操
 
 实测样本（Win11 25H2 / build 26200）：
 
-| 目标 | `vdm_uia_tree` 结果 | 能否 `uia_act` |
-|---|---|---|
-| 文件资源管理器 | 95 个节点，标题栏按钮标为可交互 | 能（`invoke` 真生效） |
-| 记事本（Win11 版） | 7 个节点，只有外壳 + 标题栏按钮 | 能（实测 `invoke` 最小化，`window_info` 确认 `minimized` 变了） |
-| 微信 / Steam | 1~4 个节点，只有外壳 | 读得到但内容极少（自绘 UI） |
-| DeepSeek Harness（Electron） | 12 个节点，只有标题栏按钮 | 读不到网页内容（Chromium 默认不暴露） |
+| 目标 | 窗口所在桌面 | `vdm_uia_tree` 结果 | 能否 `uia_act` |
+|---|---|---|---|
+| 文件资源管理器 | 当前 | 95 个节点，标题栏按钮标为可交互 | 能（`invoke` 真生效） |
+| 记事本（Win11 版） | **当前** | **44 个节点**：`Document「文本编辑器」`(RichEditD2DPT)、TabView、15 个工具栏按钮、状态栏 6 段文本 | 能，`setvalue` 写入中文后标题变 `*…`、截图确认文字进编辑区 |
+| 记事本（Win11 版） | **AI 工作桌面** | **7 个节点**：只剩 TitleBar + 系统菜单，编辑区和工具栏全部消失 | 只能操作标题栏按钮 |
+| 微信 / Steam | 当前 | 1~4 个节点，只有外壳 | 读得到但内容极少（自绘 UI） |
+| DeepSeek Harness（Electron） | 当前 | 12 个节点，只有标题栏按钮 | 读不到网页内容（Chromium 默认不暴露） |
+
+**注意表格里的第 2、3 行是同一份记事本**：44 → 7 的差别只来自"窗口在不在当前桌面"。
+窗口被移到别的虚拟桌面后（`cloaked`），Windows 会把不可见的内容从 UIA 树里折叠掉。
+所以现实里的组合拳是：
+
+- **截图不受影响**——cloaked 状态下 `PrintWindow` 照样拿到完整画面（已实测）
+- **`uia_tree` / `uia_act` 在后台桌面上通常只能到标题栏那一层**
+- 需要操作内部控件（输入框、按钮、菜单）时，把窗口临时移到当前桌面 → 操作 → 再移回去。
+  这会让窗口出现在用户眼前，需要用户同意；Game Mode 下不要这么做。
 
 ## 典型工作流
 
@@ -402,6 +439,20 @@ WGC 能抓到更多窗口画面，但需要 D3D11 设备 + WinRT 投影，在 .N
 | [saimanish1/logitech-ipc-protocol](https://github.com/saimanish1/logitech-ipc-protocol) | 同一套接口约定的交叉验证（独立来源确认 vtable 顺序） | **MIT** | **否**。仅作交叉验证 |
 
 两个项目都采用 MIT 许可证，其许可证要求"在副本或实质部分中保留版权声明与许可声明"。本项目**没有复制它们的源代码**，只共享接口契约这类事实性信息——严格说 MIT 的署名义务不因此触发，但仍在此主动、明确地署名与致谢：没有这些公开的逆向成果，这个插件不可能存在。
+
+### 平台组件（随系统提供，不随本插件分发）
+
+下面这些是 Windows / DSH 自带的组件，本项目只是**调用**它们，既没有重新分发也没有修改：
+
+| 组件 | 归属 | 本项目怎么用 |
+|---|---|---|
+| .NET Framework 4.7.2 运行时（CLR 4.0.30319） | Microsoft，随 Windows 提供 | `vdmhost.exe` 的运行环境。仓库里只有 54KB 的托管 exe，**不打包任何框架文件** |
+| `System.Drawing`、`System.Web.Extensions` | Microsoft，GAC 自带 | 截图位图与 PNG 编码、stdin/stdout 的 JSON 序列化 |
+| `UIAutomationClient` / `UIAutomationTypes` / `WindowsBase` | Microsoft，GAC 自带 | UI Automation 控件树读取与 pattern 调用 |
+| Win32 / COM（`user32`、`dwmapi`、`shcore`、ImmersiveShell 等） | Microsoft，操作系统 API | 窗口枚举、`PrintWindow`、进程令牌、虚拟桌面 COM |
+| DeepSeek Harness 插件系统 | 本项目宿主 | 只使用公开的 `ctx.tools.register` / `dsh.bundle.patch` 约定，不修改宿主任何文件 |
+
+因此本插件**没有任何需要随包分发的第三方二进制**：`dist/vdmhost.exe` 是 54KB 的自有托管程序，运行依赖全部来自操作系统。
 
 完整法律文本见 [LICENSE](LICENSE)（含英文的第三方署名声明）。
 

@@ -70,6 +70,39 @@ $exePath = Join-Path $pkgDir 'dist\vdmhost.exe'
 Check 'node_modules 里有插件目录' (Test-Path $pkgDir) $pkgDir
 Check 'dist\vdmhost.exe 存在' (Test-Path $exePath) $exePath
 
+# 3.5 装配补丁的 name 必须是 npm 包名 -------------------------------------
+# 实测踩过：cordis.patch.yml 里把 name 写成行 id（virtual-desktop-manager）而不是包名
+# （dsh-virtual-desktop-manager），四处落地全都 [OK]，DSH 启动时才报
+#   ERR_MODULE_NOT_FOUND: Cannot find package 'virtual-desktop-manager'
+# 插件树挂载失败，工具一个都不出现。所以这里必须单独查。
+$patchPath = Join-Path $pkgDir 'cordis.patch.yml'
+$innerPkgPath = Join-Path $pkgDir 'package.json'
+if ((Test-Path $patchPath) -and (Test-Path $innerPkgPath)) {
+  $innerName = $null
+  try { $innerName = (Get-Content -LiteralPath $innerPkgPath -Raw -Encoding UTF8 | ConvertFrom-Json).name } catch { }
+  $moduleName = $null
+  foreach ($line in (Get-Content -LiteralPath $patchPath -Encoding UTF8)) {
+    $trimmed = $line.Trim()
+    if ($trimmed.StartsWith('#')) { continue }
+    if ($trimmed -match "^name:\s*'?([^']+?)'?\s*$") { $moduleName = $Matches[1].Trim(); break }
+  }
+  $nameOk = ($moduleName -and $innerName -and ($moduleName -eq $innerName))
+  Check "cordis.patch.yml 的 name 等于包名" $nameOk "declared='$moduleName' expected='$innerName' -> DSH 启动时会报 ERR_MODULE_NOT_FOUND: Cannot find package '$moduleName'，工具全部不出现"
+}
+
+# 3.6 bundle 是否真的启用 ---------------------------------------------------
+# 装好但被禁用时，工具同样不会出现。启停状态记在 profile 的 .bundles 记录里，
+# 这里只做提示（不同 DSH 版本存储位置可能不同，不硬判失败）。
+$bundleStateFile = Get-ChildItem -LiteralPath $profileDir -Filter '*.json' -File -ErrorAction SilentlyContinue |
+  Where-Object { $_.Name -match 'bundle' } | Select-Object -First 1
+if ($bundleStateFile) {
+  $disabled = Select-String -LiteralPath $bundleStateFile.FullName -Pattern 'dsh-virtual-desktop-manager' -Context 0,3 -ErrorAction SilentlyContinue |
+    Where-Object { $_.Context.PostContext -match '"enabled"\s*:\s*false' }
+  if ($disabled) {
+    Write-Host "  [!] bundle 存在但看起来处于禁用状态 -> 用 plugin_manager set_bundle enabled=true 启用" -ForegroundColor Yellow
+  }
+}
+
 # 4. 冒烟测试（用装着的那份拷贝，不是工程目录） ----------------------------
 $smoke = Join-Path $pkgDir 'tests\host-smoke.mjs'
 if ((Test-Path $exePath) -and (Test-Path $smoke)) {

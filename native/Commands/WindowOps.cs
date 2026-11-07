@@ -71,7 +71,17 @@ namespace VdmHost.Commands
             Windows.FillDesktop(api, w);
 
             var data = w.ToJson();
-            data["isForeground"] = Win32.GetForegroundWindow() == hwnd;
+            // GetForegroundWindow() 在窗口被移到别的虚拟桌面之后，仍可能返回它（实测：记事本移到
+            // AI 工作桌面后 GetForegroundWindow() 依然是它）。用户看不见的窗口不可能是在"操作"，
+            // 所以这里必须叠加"窗口就在当前显示的桌面上"这个条件，否则会误报"这是用户正在用的窗口"。
+            bool foreground = Win32.GetForegroundWindow() == hwnd && w.OnCurrentDesktop == true;
+            data["isForeground"] = foreground;
+            if (!foreground && Win32.GetForegroundWindow() == hwnd)
+            {
+                data["foregroundNote"] =
+                    "GetForegroundWindow() 仍指向这个窗口，但它不在用户当前显示的桌面上（已 cloaked），"
+                    + "用户看不到也碰不到它，因此不判定为用户正在操作的窗口。";
+            }
             return data;
         }
 

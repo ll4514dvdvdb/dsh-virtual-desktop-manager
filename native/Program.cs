@@ -21,7 +21,7 @@ namespace VdmHost
 {
     internal static class Program
     {
-        private const string HostVersion = "0.1.2";
+        private const string HostVersion = "0.1.3";
 
         [STAThread]
         private static int Main(string[] args)

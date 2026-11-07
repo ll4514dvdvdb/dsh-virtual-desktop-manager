@@ -5,7 +5,9 @@
 #   状态目录固定 ~/.dsh/virtual-desktop-manager/（可用环境变量 VDM_STATE_DIR 覆盖）
 - insert:
     - id: virtual-desktop-manager
-      name: 'virtual-desktop-manager'
+      # name 必须是 npm 包名（import 用的模块名），不是行 id。
+      # 写错成 id 会报 ERR_MODULE_NOT_FOUND: Cannot find package 'virtual-desktop-manager'。
+      name: 'dsh-virtual-desktop-manager'
       inject: [tools]
       config:
         hostPath: ''

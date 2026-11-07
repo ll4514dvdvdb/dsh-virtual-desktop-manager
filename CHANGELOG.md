@@ -1,5 +1,50 @@
 # 更新记录
 
+## 0.1.3 — 装配补丁的模块名修正 + 前台判定修正
+
+这一版修的是"重启 DSH 之后工具一个都不出现"和"窗口明明在别的桌面上却被报成用户正在操作"。
+
+### 修复
+
+- **`cordis.patch.yml` 里 `name` 写成了行 id，导致插件根本加载不起来**（严重）。
+  `name` 是 **import 用的 npm 包名**（`dsh-virtual-desktop-manager`），`id` 才是行标识（`virtual-desktop-manager`）。
+  写错后四步安装校验全部 `[OK]`（deps / bundles / lockfile / node_modules 都在），
+  但 DSH 启动时只有一行警告：
+  ```
+  virtual-desktop-manager (virtual-desktop-manager): failed to import:
+  Error [ERR_MODULE_NOT_FOUND]: Cannot find package 'virtual-desktop-manager'
+  ```
+  16 个 `vdm_*` 工具一个都不出现。已修正，并在 `scripts/verify-install.ps1` 增加 3.5 节专门校验
+  "`cordis.patch.yml` 的 `name` 必须等于包内 `package.json` 的 `name`"——这个检查已用注入错误的回归测试验证过会报红。
+- **`window_info` 把已 cloaked 的窗口误报成"用户正在操作的窗口"**。
+  `GetForegroundWindow()` 在窗口被移到别的虚拟桌面后仍可能继续指向它（实测：记事本移到 AI 工作桌面后依然如此），
+  于是 `isForeground:true` + "不要移动也不要关闭它"的警告一起误导。
+  现在 `isForeground` 同时要求窗口就在当前显示的桌面上；`GetForegroundWindow()` 仍指向它但已不可见时，
+  另给 `foregroundNote` 说明原因（`fmtWindowInfo` 会把它渲染出来）。
+
+### 文档校正（实测纠错）
+
+- `docs/limitations.md` 的 UIA 表格此前把「记事本 7 节点」当成记事本本身的能力，**这是错的**。
+  实测同一份记事本：在**当前桌面**是 **44 节点**（含 `Document「文本编辑器」RichEditD2DPT`、TabView、
+  工具栏 15 个按钮、状态栏 6 段文本），被移到别的虚拟桌面后只剩 **7 节点**（只有 TitleBar + 系统菜单）。
+  差别只来自 `cloaked`。已按这个结论重写表格与说明，并写明"想让 `uia_act` 操作到内部控件，
+  通常需要先把窗口临时移到当前桌面（会出现在用户眼前，需用户同意）"。
+
+### 本轮真机验证记录（Win11 25H2 / build 26200）
+
+一次完整往返，全程用户在主页面玩 Stacklands：
+
+1. `vdm_ensure_workspace_desktop` → 复用 `a25e923a-f7d9-4516-94f5-79b538732033`
+2. `vdm_launch_in_desktop` 启动记事本到 AI 工作桌面 → PID 33228 是转发壳（立刻 ExitCode=0），
+   按进程名兜底匹配到真实 UI 进程 33640 的窗口 `0x21A30`
+3. `vdm_capture_window` 在不可见桌面上截到完整界面（2160×1308，60KB）
+4. `vdm_uia_tree` cloaked 状态 → 7 节点；临时移到主页面后 → 44 节点，找到 `[0/0] Document "文本编辑器"`
+5. `vdm_uia_act` 对 `0/0` 执行 `setvalue` → 写入中文成功，窗口标题变成 `*虚拟桌面插件测试：…`，
+   截图确认文字真的出现在编辑区（41 个字符），全程没动鼠标键盘
+6. `vdm_move_window` 移回 AI 工作桌面，告警"这个窗口原本就在用户当前显示的桌面上"正确触发
+7. `vdm_close_window` dryRun → `high` 风险（文档类进程 + 标题带 `*` + 当前前台）；
+   `dryRun:false, force:true` → 窗口关闭
+
 ## 0.1.2 — UI Automation 控件级自动化
 
 补上需求里"GUI 自动化优先用 UI Automation，不要默认 SendInput"这一块。

@@ -13,23 +13,3 @@ The above copyright notice and this permission notice shall be included in all
 copies or substantial portions of the Software.
 
 THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-SOFTWARE.
-
----
-
-Third-party reference acknowledgement:
-
-The virtual desktop COM interface signatures (IIDs, vtable ordering) were
-derived from the publicly available reverse-engineering work of:
-
-  - MScholtes/VirtualDesktop (MIT, Copyright (c) 2017 Markus Scholtes)
-  - saimanish1/logitech-ipc-protocol (cross-validation)
-
-This project is an independent implementation and does not copy code from
-those projects; only the interface contract (GUIDs and method ordering) is
-shared. Those projects are not affiliated with this one.
